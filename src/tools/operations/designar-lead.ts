@@ -1,11 +1,11 @@
 /**
  * src/tools/operations/designar-lead.ts
  *
- * Tool designar_lead — designa lead para executivo ESPECÍFICO mencionado pelo cliente.
- * Replica o subworkflow de 16 nós do n8n (IvDqiFrUig0OHBbw).
+ * Tool designar_lead — encaminha lead para executivo ESPECÍFICO.
  *
- * Diferente de notificar_equipe (automático): aqui o cliente ou a Rica identificou
- * explicitamente o nome de um executivo ("quero falar com a Helen", "me indicaram o André").
+ * Usado quando: (a) membro da equipe pede pra direcionar um lead, ou
+ * (b) o próprio lead menciona um executivo pelo nome.
+ * Diferente de notificar_equipe que faz roteamento automático por produto.
  */
 
 import { tool } from 'ai'
@@ -19,9 +19,10 @@ import { scheduleExecutiveFollowup } from '../../followup/executive-followup.js'
 export function buildDesignarLeadTool(conversationPhone: string) {
   return tool({
     description:
-      'Designa o lead para um executivo ESPECÍFICO quando o cliente mencionar um nome ' +
-      '(ex: "quero falar com a Helen", "me indicaram o André"). ' +
-      'Usar apenas quando houver menção explícita a um executivo.',
+      'Encaminha lead para um executivo ESPECÍFICO. Usar quando alguém da equipe pedir para ' +
+      'direcionar um lead (ex: "manda pro André", "é pra Helen") OU quando o próprio lead ' +
+      'mencionar um executivo (ex: "me indicaram o André"). ' +
+      'IMPORTANTE: quem está na conversa pode ser da EQUIPE — o lead é outra pessoa (telefone informado).',
     parameters: z.object({
       executivo_mencionado: z.string().describe('Nome do executivo mencionado (ex: "Helen", "André Augusto")'),
       nome_lead: z.string().describe('Nome do lead'),
