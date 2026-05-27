@@ -152,17 +152,16 @@ rica-bot/
 
 ## Plano de sprints
 
-| Sprint | Conteúdo | Status |
+| Etapa | Conteúdo | Status |
 |---|---|---|
-| **-1** | Mapeamento profundo (Lidia ON/OFF, IF_Candidato, RAG, etc.) | A fazer |
-| **0** | Setup projeto, health endpoints, CI | ✅ **Concluído** |
-| **1** | Webhook + Agent core (texto, áudio, imagem, PDF, buffer) | A fazer |
-| **2** | 14 CRM tools + pre-fetch + save-message | A fazer |
-| **3** | notificar_equipe + designar_lead + dedup + roteamento | A fazer |
-| **4** | Follow-up worker (cron + sub-agente) | A fazer |
-| **5** | Tools restantes + RAG (buscar_documentos) | A fazer |
-| **6** | Canary release (10% → 100% do tráfego) | A fazer |
-| **7** | Disparos em massa + limpeza n8n | A fazer |
+| Setup | Projeto, health endpoints, CI | ✅ |
+| Webhook + Agent | Texto, áudio, imagem, PDF, buffer Redis | ✅ |
+| CRM tools | 14 tools + pre-fetch + save-message | ✅ |
+| Notificação | notificar_equipe + designar_lead + dedup + roteamento | ✅ |
+| Follow-up | Worker cron + sub-agente | ✅ |
+| RAG | buscar_documentos via match_documents (Supabase pgvector) | ✅ |
+| Cutover | Migração direta (sem canary) — trocar webhook do uazapi | A fazer |
+| Disparos | Disparos em massa (futuro) | A fazer |
 
 ---
 

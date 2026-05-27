@@ -1,5 +1,8 @@
 /**
- * src/index.ts — Entrypoint do rica-bot (Sprint 6)
+ * src/index.ts — Entrypoint do rica-bot
+ *
+ * Sem canary release: 100% das mensagens são processadas pelo rica-bot.
+ * Rollback de emergência = trocar webhook do uazapi de volta pro sistema antigo.
  */
 import 'dotenv/config'
 import Fastify from 'fastify'
@@ -11,12 +14,8 @@ import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
 import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
 import { startFollowupWorker } from './followup/worker.js'
-import { getAllMetrics, closeMetrics } from './observability/metrics.js'
+import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
-import { getCanaryDecision, forwardToN8n } from './canary/router.js'
-import { normalizePhone } from './uazapi/normalize-phone.js'
-import { parseWebhookPayload } from './uazapi/webhook-schema.js'
-import { incrementMetric } from './observability/metrics.js'
 
 export async function buildApp() {
   const isDev = env.NODE_ENV !== 'production'
@@ -42,10 +41,6 @@ export async function buildApp() {
     version: '1.0.0',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    canary: {
-      percentage: env.CANARY_PERCENTAGE,
-      n8n_configured: Boolean(env.N8N_WEBHOOK_URL),
-    },
   }))
 
   app.get('/ready', async (_, reply) => {
@@ -63,7 +58,6 @@ export async function buildApp() {
     const metrics = await getAllMetrics()
     return {
       timestamp: new Date().toISOString(),
-      canary_percentage: env.CANARY_PERCENTAGE,
       counters: metrics,
     }
   })
@@ -75,43 +69,19 @@ export async function buildApp() {
       .send(report)
   })
 
-  // ── canary status ───────────────────────────────────────────────────────────
-  app.get('/canary', async () => ({
-    percentage: env.CANARY_PERCENTAGE,
-    n8n_url: env.N8N_WEBHOOK_URL ?? 'não configurada',
-    description:
-      env.CANARY_PERCENTAGE === 0
-        ? 'Tudo vai para o n8n (rica-bot em standby)'
-        : env.CANARY_PERCENTAGE === 100
-        ? 'Tudo no rica-bot (n8n desativado)'
-        : `${env.CANARY_PERCENTAGE}% rica-bot, ${100 - env.CANARY_PERCENTAGE}% n8n`,
-  }))
-
-  // ── webhook principal (com canary) ──────────────────────────────────────────
+  // ── webhook principal ───────────────────────────────────────────────────────
   app.post(env.UAZAPI_WEBHOOK_PATH, async (request, reply) => {
     void incrementMetric('webhook.received')
 
     try {
-      // Extrai telefone para decisão do canary
-      const parsed = parseWebhookPayload(request.body)
-      const phone = parsed ? normalizePhone(parsed.phone) : ''
-
-      const decision = phone ? getCanaryDecision(phone) : 'rica-bot'
-
-      if (decision === 'n8n') {
-        void incrementMetric('webhook.forwarded_n8n')
-        // Forward assíncrono para o n8n — não bloqueia o ack
-        void forwardToN8n(request.body)
-      } else {
-        void incrementMetric('webhook.processed_ricabot')
-        await handleWebhook(request.body, { pool: getPool() })
-      }
+      await handleWebhook(request.body, { pool: getPool() })
+      void incrementMetric('webhook.processed')
     } catch (err) {
       logger.error({ err }, 'Erro no handler do webhook')
       void incrementMetric('errors.webhook')
     }
 
-    // Sempre responde 200 para o uazapi (evita retentatitivas)
+    // Sempre responde 200 para o uazapi (evita retentativas)
     return reply.code(200).send({ status: 'ok' })
   })
 
@@ -139,13 +109,7 @@ async function main() {
       port: env.PORT,
       env: env.NODE_ENV,
       webhook: env.UAZAPI_WEBHOOK_PATH,
-      canary: `${env.CANARY_PERCENTAGE}%`,
     }, '🚀 rica-bot iniciado')
-
-    // Log de aviso se canary = 0 (deploy sem tráfego real)
-    if (env.CANARY_PERCENTAGE === 0) {
-      logger.warn('⚠️  CANARY_PERCENTAGE=0 — rica-bot em standby, todo tráfego vai pro n8n')
-    }
   } catch (err) {
     logger.fatal({ error: err }, 'Falha na inicialização')
     process.exit(1)

@@ -79,13 +79,6 @@ const EnvSchema = z.object({
   HR_NOTIFY_PHONE: z.string().min(1),
   HR_EMAIL: z.string().email(),
 
-  // ── Canary release ────────────────────────────────────────────────────────────
-  // 0 = tudo vai pro n8n, 100 = tudo vai pro rica-bot
-  // Fluxo de aumento: 0 → 10 → 25 → 50 → 75 → 100
-  CANARY_PERCENTAGE: z.string().optional().default('0').pipe(z.coerce.number().int().min(0).max(100)),
-  // URL do webhook do n8n para forward (quando canary < 100)
-  N8N_WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
-
   // ── Observabilidade ───────────────────────────────────────────────────────
   ALERT_WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
 

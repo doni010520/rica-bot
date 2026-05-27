@@ -6,17 +6,14 @@
  * consultáveis via endpoint /metrics.
  *
  * Counters mantidos:
- *   webhook.received          — total de webhooks recebidos
- *   webhook.processed_ricabot — processados pelo rica-bot
- *   webhook.forwarded_n8n     — forwarded pro n8n (canary)
- *   webhook.ignored           — fromMe, revoke, grupos, etc.
- *   agent.calls               — chamadas ao LLM
- *   agent.fallbacks           — respostas vazias → fallback
- *   tools.{name}              — chamadas por tool
- *   canary.forwarded_to_n8n   — forwarded durante canary
- *   canary.forward_error      — erros de forward
- *   followup.sent             — follow-ups enviados
- *   errors.{context}          — erros por contexto
+ *   webhook.received     — total de webhooks recebidos
+ *   webhook.processed    — processados com sucesso
+ *   webhook.ignored      — fromMe, revoke, grupos, etc.
+ *   agent.calls          — chamadas ao LLM
+ *   agent.fallbacks      — respostas vazias → fallback
+ *   tools.{name}         — chamadas por tool
+ *   followup.sent        — follow-ups enviados
+ *   errors.{context}     — erros por contexto
  */
 
 import IORedis from 'ioredis'

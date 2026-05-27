@@ -1,7 +1,7 @@
 /**
  * src/observability/preflight.ts
  *
- * Verificação pré-cutover — testa todas as integrações antes de ligar o canary.
+ * Verificação pré-cutover — testa todas as integrações antes de receber tráfego.
  * Exposto em GET /preflight.
  *
  * Itens verificados:
@@ -32,7 +32,7 @@ export type PreflightReport = {
   overall: 'ok' | 'degraded' | 'critical'
   timestamp: string
   checks: Record<string, CheckResult>
-  canProceedWithCanary: boolean
+  canProceed: boolean
 }
 
 export async function runPreflight(): Promise<PreflightReport> {
@@ -55,14 +55,14 @@ export async function runPreflight(): Promise<PreflightReport> {
 
   const overall = criticalFailed.length > 0 ? 'critical' : anyFailed ? 'degraded' : 'ok'
 
-  // RAG degraded não bloqueia canary (funciona sem documentos)
-  const canProceedWithCanary = criticalFailed.length === 0
+  // RAG degraded não bloqueia subida (funciona sem documentos)
+  const canProceed = criticalFailed.length === 0
 
   return {
     overall,
     timestamp: new Date().toISOString(),
     checks,
-    canProceedWithCanary,
+    canProceed,
   }
 }
 

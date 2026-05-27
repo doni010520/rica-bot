@@ -10,10 +10,10 @@
  * Pipeline:
  *   query → embeddings OpenAI (text-embedding-3-small) → match_documents (pgvector) → contexto
  *
- * NOTA: O nome da tabela e a função RPC dependem de como o n8n indexou os documentos.
- * Padrão Supabase AI: tabela `documents` com coluna `embedding vector(1536)` e
- * função `match_documents(query_embedding, match_count, filter)`.
- * Confirmar esquema no Supabase antes do Sprint 6 (canary).
+ * Esquema: padrão Supabase AI — tabela `documents` com coluna
+ * `embedding vector(1536)` e função
+ * `match_documents(query_embedding, match_count, filter)`.
+ * Confirmado existente em 27/mai/2026.
  */
 
 import { tool } from 'ai'

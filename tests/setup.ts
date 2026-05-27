@@ -43,7 +43,6 @@ process.env['LIDIA_TAKEOVER_OFF_COMMAND'] = 'Roberta aqui!'
 process.env['LIDIA_TAKEOVER_ON_COMMAND'] = 'tá mais!'
 process.env['HR_NOTIFY_PHONE'] = '5500000000003'
 process.env['HR_EMAIL'] = 'rh@test.example.com'
-process.env['CANARY_PERCENTAGE'] = '0'
 
 // ─── Executivos (valores fake mas no formato exigido pelo Zod) ───────────────
 // 5510...0001..0010 — claramente sintéticos, não são telefones reais
