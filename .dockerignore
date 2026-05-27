@@ -2,6 +2,7 @@ node_modules
 dist
 .env
 .env.local
+.env.production
 tests
 *.test.ts
 *.spec.ts
@@ -9,10 +10,12 @@ coverage
 .nyc_output
 .git
 .gitignore
-README.md
+.github
 CHANGELOG.md
-tsconfig.json
-tsconfig.build.json
+RUNBOOK-CUTOVER.md
 vitest.config.ts
-*.md
-!prompts/*.md
+eslint.config.js
+.prettierrc
+*.log
+.DS_Store
+Thumbs.db
