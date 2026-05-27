@@ -126,6 +126,8 @@ export type ParsedMessage = {
   phone: string
   /** true se mensagem foi enviada pela própria conta (operador ou Rica) */
   fromMe: boolean
+  /** true se foi a própria API que enviou (eco do que rica-bot mandou) — deve ser ignorada */
+  wasSentByApi: boolean
   /** ID único da mensagem no WhatsApp */
   messageId: string
   /** Nome do contato no WhatsApp */
@@ -176,8 +178,12 @@ export function parseWebhookPayload(raw: unknown): ParsedMessage | null {
   const messageId = msg.messageid ?? msg.id ?? ''
   if (!messageId) return null
 
-  // fromMe (default false se ausente)
+  // fromMe + wasSentByApi:
+  //   wasSentByApi=true → eco do que rica-bot enviou (ignorar)
+  //   fromMe=true && wasSentByApi=false → operador humano digitou no WhatsApp
+  //   fromMe=false → mensagem do cliente
   const fromMe = msg.fromMe ?? false
+  const wasSentByApi = msg.wasSentByApi ?? false
 
   // Nome do contato
   const displayName = msg.senderName ?? chat?.wa_name ?? chat?.name ?? chat?.lead_name ?? ''
@@ -195,6 +201,7 @@ export function parseWebhookPayload(raw: unknown): ParsedMessage | null {
   return {
     phone: rawPhone,
     fromMe,
+    wasSentByApi,
     messageId,
     displayName,
     mediaType,

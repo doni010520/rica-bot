@@ -201,6 +201,16 @@ describe('parseWebhookPayload — formato uazapi nativo', () => {
       expect(r!.fromMe).toBe(true)
     })
 
+    it('detecta wasSentByApi=true (eco da própria API)', () => {
+      const payload = {
+        ...textPayload,
+        message: { ...textPayload.message, messageid: 'MSG_API', fromMe: true, wasSentByApi: true },
+      }
+      const r = parseWebhookPayload(payload)
+      expect(r!.wasSentByApi).toBe(true)
+      expect(r!.fromMe).toBe(true)
+    })
+
     it('rejeita mensagens de grupo (retorna null)', () => {
       const r = parseWebhookPayload(groupPayload)
       expect(r).toBeNull()

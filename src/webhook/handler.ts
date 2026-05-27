@@ -67,6 +67,13 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
     return
   }
 
+  // Eco da própria API (rica-bot enviou e uazapi devolveu) — ignora silenciosamente
+  if (parsed.wasSentByApi) {
+    log.debug('ignored_was_sent_by_api')
+    return
+  }
+
+  // fromMe sem wasSentByApi → operador humano digitou no WhatsApp
   if (parsed.fromMe) {
     await handleFromMe(phone, parsed.text ?? '', deps.pool, log)
     return
