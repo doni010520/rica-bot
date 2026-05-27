@@ -74,16 +74,19 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
 
       await sendWhatsApp(executive.phoneFormatted, execMessage, log)
 
-      // 4. Envia cópia para Maria Helena (gestora)
-      const managerMessage = buildManagerMessage({
-        leadName: nome,
-        product: produto,
-        state: routing.state,
-        ddd: routing.ddd,
-        executiveName: executive.name,
-        reason,
-      })
-      await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, managerMessage, log)
+      // 4. Envia cópia para Maria Helena (gestora) — exceto se ela própria for a
+      //    executiva escolhida (fallback), pra evitar receber 2 msgs.
+      if (executive.email !== EXECUTIVES.MARIA_HELENA.email) {
+        const managerMessage = buildManagerMessage({
+          leadName: nome,
+          product: produto,
+          state: routing.state,
+          ddd: routing.ddd,
+          executiveName: executive.name,
+          reason,
+        })
+        await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, managerMessage, log)
+      }
 
       // 5. Atribui owner no CRM (assign-owner-by-phone)
       try {

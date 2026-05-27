@@ -62,7 +62,7 @@ export function buildDesignarLeadTool(conversationPhone: string) {
         `⚡ *Clique para chamar no WhatsApp:*\nwa.me/${phoneForLink}\n\n` +
         `🤖 _Rica - Assistente de Vendas_`
 
-      // Envia WhatsApp
+      // Envia WhatsApp pro executivo designado
       try {
         await fetch(`${env.UAZAPI_BASE_URL}/send/text`, {
           method: 'POST',
@@ -72,6 +72,37 @@ export function buildDesignarLeadTool(conversationPhone: string) {
         })
       } catch (err) {
         log.error({ err }, 'Falha ao enviar WhatsApp para executivo')
+      }
+
+      // Envia cópia pra Maria Helena (gestora) — exceto se ela for a designada
+      if (executive.email !== EXECUTIVES.MARIA_HELENA.email) {
+        const now = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          dateStyle: 'short',
+          timeStyle: 'short',
+        }).format(new Date())
+        const managerMessage =
+          `📊 *LEAD DESIGNADO (manual)*\n\n` +
+          `👤 *Lead:* ${nome_lead || 'Não informado'}\n` +
+          `🎯 *Interesse:* ${produto || 'Não informado'}\n` +
+          `📱 *Tel:* ${telefone_lead}\n\n` +
+          `➡️ *Direcionado para:* ${executive.name}\n` +
+          `📋 *Motivo:* Designação manual pela equipe\n\n` +
+          `⏰ ${now}`
+        try {
+          await fetch(`${env.UAZAPI_BASE_URL}/send/text`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', token: env.UAZAPI_TOKEN },
+            body: JSON.stringify({
+              number: EXECUTIVES.MARIA_HELENA.phoneFormatted,
+              text: managerMessage,
+              delay: '3000',
+            }),
+            signal: AbortSignal.timeout(8_000),
+          })
+        } catch (err) {
+          log.warn({ err }, 'Falha ao enviar cópia gestora')
+        }
       }
 
       // Atribui owner no CRM

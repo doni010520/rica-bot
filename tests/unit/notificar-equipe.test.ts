@@ -154,14 +154,23 @@ describe('notificar_equipe tool', () => {
   })
 
   describe('envio de notificações', () => {
-    it('envia WhatsApp para executivo E para Maria Helena', async () => {
-      await callNotificar({ produto: 'Consultoria', telefone: '5511999887799' })
-      // Deve ter feito pelo menos 2 chamadas fetch (executivo + gestora)
-      // + 1 para CRM assign-owner + 1 para atividade = 4 total
+    it('envia WhatsApp para executivo E para Maria Helena (quando ela não é a destinatária)', async () => {
+      // Usa GPS → roteado para André (não Maria Helena), então MH recebe a cópia gestora
+      await callNotificar({ produto: 'GPS', telefone: '5511999887799' })
       const wappCalls = (mockFetch as Mock).mock.calls.filter(
         (c) => String(c[0]).includes('/send/text')
       )
       expect(wappCalls.length).toBeGreaterThanOrEqual(2)
+    })
+
+    it('NÃO duplica msg pra Maria Helena quando ela é a executiva (fallback)', async () => {
+      // "Consultoria" não bate em regra específica → fallback → Maria Helena
+      // Nesse caso ela só deve receber 1 mensagem (a do executivo), não a cópia gestora
+      await callNotificar({ produto: 'Consultoria genérica', telefone: '5511999887700' })
+      const wappCalls = (mockFetch as Mock).mock.calls.filter(
+        (c) => String(c[0]).includes('/send/text')
+      )
+      expect(wappCalls.length).toBe(1)
     })
 
     it('segundo WhatsApp é para Maria Helena (gestora)', async () => {
