@@ -34,10 +34,11 @@ COPY --chown=ricabot:nodejs prompts/ ./prompts/
 
 USER ricabot
 
-# Health check nativo do Docker
+# Health check nativo — usa PORT do ambiente (injetado pelo orquestrador)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD node -e "fetch('http://localhost:' + (process.env.PORT || 3000) + '/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
-EXPOSE 3000
+# Porta definida pelo orquestrador (EasyPanel / Docker run -p)
+# A app escuta em process.env.PORT (ver src/lib/env.ts)
 
 CMD ["node", "dist/index.js"]
