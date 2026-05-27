@@ -60,10 +60,12 @@ export class MessageBuffer {
     await this.redis.rpush(bufferKey, text)
     await this.redis.expire(bufferKey, BUFFER_TTL_SECONDS)
 
-    // Upsert: remove job anterior e adiciona novo com delay resetado
-    await this.queue.remove(`phone:${phone}`).catch(() => null)
+    // Upsert: remove job anterior e adiciona novo com delay resetado.
+    // jobId NÃO pode conter ':' (BullMQ usa como separador interno).
+    const jobId = `phone-${phone}`
+    await this.queue.remove(jobId).catch(() => null)
     await this.queue.add('process', { phone }, {
-      jobId: `phone:${phone}`,
+      jobId,
       delay: env.MSG_BUFFER_WAIT_MS,
     })
 
