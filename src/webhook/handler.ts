@@ -53,7 +53,8 @@ if (ALLOWLIST_ACTIVE) {
 export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps): Promise<void> {
   const parsed = parseWebhookPayload(rawBody)
   if (!parsed) {
-    logger.warn('Webhook: payload inválido — ignorando')
+    // DEBUG: loga o payload bruto pra diagnosticar formato do uazapi
+    logger.warn({ rawBody }, 'Webhook: payload inválido — ignorando')
     return
   }
 
