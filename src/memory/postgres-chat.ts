@@ -7,13 +7,13 @@
  *   - sessionKey = telefone (ex: "5511999887766")
  *   - contextWindowLength = padrão (~10 pares = 20 mensagens)
  *
- * A tabela criada pelo LangChain tem estrutura:
+ * A tabela criada pelo LangChain (e confirmada no Supabase em 27/mai/2026) tem:
  *   CREATE TABLE IF NOT EXISTS {tableName} (
- *     id SERIAL PRIMARY KEY,
- *     session_id TEXT NOT NULL,
- *     message JSONB NOT NULL,
- *     created_at TIMESTAMPTZ DEFAULT NOW()
+ *     id          SERIAL PRIMARY KEY,
+ *     session_id  VARCHAR NOT NULL,
+ *     message     JSONB   NOT NULL
  *   )
+ * Não tem `created_at` — a ordenação é via `id` (serial monotônico).
  *
  * O campo `message` é um JSON com { type: 'human'|'ai', data: { content: string } }
  *
@@ -33,7 +33,6 @@ export type ChatRole = 'human' | 'ai'
 export type ChatMessage = {
   role: ChatRole
   content: string
-  createdAt?: Date
 }
 
 /** Formato compatível com LangChain PostgresChatMessageHistory */
@@ -61,9 +60,11 @@ export async function loadChatHistory(
   const table = env.CHAT_MEMORY_TABLE
 
   try {
-    // Pega as N mensagens mais recentes, depois inverte para ordem cronológica
-    const result = await pool.query<{ message: LangChainMessage; created_at: Date }>(
-      `SELECT message, created_at
+    // Pega as N mensagens mais recentes (ordenadas por id desc), depois inverte
+    // para ordem cronológica. A tabela n8n_chat_histories não tem created_at —
+    // ordenação por id (SERIAL monotônico) é a única opção.
+    const result = await pool.query<{ message: LangChainMessage }>(
+      `SELECT message
        FROM "${table}"
        WHERE session_id = $1
        ORDER BY id DESC
@@ -76,7 +77,6 @@ export async function loadChatHistory(
       .map((row): ChatMessage => ({
         role: row.message.type,
         content: row.message.data.content,
-        createdAt: row.created_at,
       }))
 
     logger.debug({ phone: phone.slice(-4), count: messages.length }, 'Histórico carregado')
@@ -176,15 +176,15 @@ export function historyToMessages(
 
 /**
  * Cria a tabela de memória se não existir.
- * Compatível com o formato LangChain.
+ * Schema idêntico ao que o n8n PostgresChatMessageHistory cria
+ * (confirmado no Supabase em 27/mai/2026).
  */
 export async function createMemoryTable(pool: Pool, tableName: string): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS "${tableName}" (
-      id        SERIAL PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      message   JSONB NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      id          SERIAL PRIMARY KEY,
+      session_id  VARCHAR NOT NULL,
+      message     JSONB   NOT NULL
     );
     CREATE INDEX IF NOT EXISTS "${tableName}_session_idx"
       ON "${tableName}" (session_id, id);
