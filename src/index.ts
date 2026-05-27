@@ -14,6 +14,7 @@ import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
 import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
 import { startFollowupWorker } from './followup/worker.js'
+import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup/executive-followup.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
 import { logBuffer } from './observability/log-buffer.js'
@@ -133,6 +134,7 @@ async function main() {
   try {
     // Inicia workers
     startFollowupWorker(getPool())
+    startExecutiveFollowupWorker()
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
@@ -156,6 +158,7 @@ async function main() {
     logger.info({ signal }, 'Encerrando...')
     try {
       await getMessageBuffer().close()
+      await closeExecutiveFollowup()
       if (app) await app.close()
       await closePool()
       await closeMetrics()

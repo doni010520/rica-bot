@@ -41,11 +41,16 @@ const EnvSchema = z.object({
   CRM_API_URL: z.string().url(),
   ORG_ID: z.string().uuid(),
 
-  // ── Follow-up ──────────────────────────────────────────────────────────────
+  // ── Follow-up (leads) ───────────────────────────────────────────────────────
   FOLLOWUP_CRON: z.string().default('0 9-18 * * 1-5'),
   FOLLOWUP_TIMEZONE: z.string().default('America/Sao_Paulo'),
   FOLLOWUP_MAX_ATTEMPTS: intStr(3),
   FOLLOWUP_CLOSE_AFTER_DAYS: intStr(7),
+
+  // ── Follow-up (executivos — cobrança de status) ────────────────────────────
+  // Após encaminhar lead, Rica cobra o executivo N horas depois.
+  EXEC_FOLLOWUP_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  EXEC_FOLLOWUP_DELAY_HOURS: intStr(14),
 
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),

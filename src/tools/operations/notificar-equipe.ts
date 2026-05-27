@@ -22,6 +22,7 @@ import { crmRequest } from '../../lib/crm-client.js'
 import { env } from '../../lib/env.js'
 import { logger } from '../../observability/logger.js'
 import { nowFormatted } from '../../lib/timezone.js'
+import { scheduleExecutiveFollowup } from '../../followup/executive-followup.js'
 
 const NotificarInputSchema = z.object({
   nome: z.string().describe('Nome completo do lead'),
@@ -120,6 +121,22 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
         } catch (err) {
           log.warn({ err }, 'Falha ao registrar atividade — continuando')
         }
+      }
+
+      // 7. Agenda cobrança de status ao executivo (14h depois, horário comercial)
+      try {
+        await scheduleExecutiveFollowup({
+          executivePhone: executive.phoneFormatted,
+          executiveName: executive.name,
+          leadName: nome,
+          leadPhone: telefone,
+          product: produto,
+          dealId: deal_id,
+          forwardedAt: new Date().toISOString(),
+          assignedVia: 'notificar_equipe',
+        })
+      } catch (err) {
+        log.warn({ err }, 'Falha ao agendar cobrança de status — continuando')
       }
 
       log.info({ executive: executive.name }, 'Notificação enviada com sucesso')

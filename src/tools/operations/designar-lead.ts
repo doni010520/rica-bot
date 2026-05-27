@@ -14,6 +14,7 @@ import { EXECUTIVES, EXECUTIVE_ALIASES, type ExecutiveKey } from '../../routing/
 import { crmRequest } from '../../lib/crm-client.js'
 import { env } from '../../lib/env.js'
 import { logger } from '../../observability/logger.js'
+import { scheduleExecutiveFollowup } from '../../followup/executive-followup.js'
 
 export function buildDesignarLeadTool(conversationPhone: string) {
   return tool({
@@ -132,6 +133,22 @@ export function buildDesignarLeadTool(conversationPhone: string) {
             },
           })
         } catch { /* ignora */ }
+      }
+
+      // Agenda cobrança de status ao executivo (14h depois, horário comercial)
+      try {
+        await scheduleExecutiveFollowup({
+          executivePhone: executive.phoneFormatted,
+          executiveName: executive.name,
+          leadName: nome_lead,
+          leadPhone: telefone_lead,
+          product: produto ?? '',
+          dealId: deal_id,
+          forwardedAt: new Date().toISOString(),
+          assignedVia: 'designar_lead',
+        })
+      } catch (err) {
+        log.warn({ err }, 'Falha ao agendar cobrança de status — continuando')
       }
 
       return { success: true, executive: executive.name, message: `Designado para ${executive.name}` }

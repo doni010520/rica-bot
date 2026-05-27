@@ -45,6 +45,10 @@ process.env['HR_NOTIFY_PHONE'] = '5500000000003'
 process.env['HR_EMAIL'] = 'rh@test.example.com'
 process.env['ADMIN_TOKEN'] = ''
 
+// ─── Follow-up executivos (cobrança de status) ──────────────────────────────
+process.env['EXEC_FOLLOWUP_ENABLED'] = 'true'
+process.env['EXEC_FOLLOWUP_DELAY_HOURS'] = '14'
+
 // ─── Executivos (valores fake mas no formato exigido pelo Zod) ───────────────
 // 5510...0001..0010 — claramente sintéticos, não são telefones reais
 process.env['EXEC_ANDRE_PHONE']         = '5510000000001'

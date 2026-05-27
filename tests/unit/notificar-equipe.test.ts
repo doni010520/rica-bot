@@ -32,6 +32,11 @@ vi.mock('../../src/lib/crm-client.js', () => ({
   crmRequest: vi.fn().mockResolvedValue({ success: true }),
 }))
 
+// Executive followup — mock pra não tentar conectar ao Redis via BullMQ
+vi.mock('../../src/followup/executive-followup.js', () => ({
+  scheduleExecutiveFollowup: vi.fn().mockResolvedValue(undefined),
+}))
+
 function makeOkResponse() {
   return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') } as Response)
 }
