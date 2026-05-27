@@ -15,7 +15,9 @@
  *   )
  * Não tem `created_at` — a ordenação é via `id` (serial monotônico).
  *
- * O campo `message` é um JSON com { type: 'human'|'ai', data: { content: string } }
+ * O campo `message` é um JSON com dois formatos possíveis:
+ *   - v2 (n8n novo): { type: 'human'|'ai', data: { content: string } }
+ *   - v1 (n8n antigo): { type: 'human'|'ai', content: string }
  *
  * NOTA: Esta implementação é compatível com o formato LangChain para que a
  * memória existente do n8n seja reutilizada sem migração de dados.
@@ -35,10 +37,13 @@ export type ChatMessage = {
   content: string
 }
 
-/** Formato compatível com LangChain PostgresChatMessageHistory */
+/** Formato compatível com LangChain PostgresChatMessageHistory (duas variantes) */
 type LangChainMessage = {
   type: ChatRole
-  data: { content: string; additional_kwargs?: Record<string, unknown> }
+  /** Formato novo: { data: { content } } */
+  data?: { content: string; additional_kwargs?: Record<string, unknown> }
+  /** Formato antigo (n8n/LangChain v1): content direto na raiz */
+  content?: string
 }
 
 // ─── funções públicas ─────────────────────────────────────────────────────────
@@ -74,10 +79,16 @@ export async function loadChatHistory(
 
     const messages = result.rows
       .reverse()
-      .map((row): ChatMessage => ({
-        role: row.message.type,
-        content: row.message.data.content,
-      }))
+      .map((row): ChatMessage | null => {
+        const msg = row.message
+        // Suporta dois formatos de LangChain:
+        // v1 (n8n antigo): { type, content }
+        // v2 (n8n novo):   { type, data: { content } }
+        const content = msg?.data?.content ?? msg?.content
+        if (!content || !msg?.type) return null
+        return { role: msg.type as ChatRole, content }
+      })
+      .filter((m): m is ChatMessage => m !== null)
 
     logger.debug({ phone: phone.slice(-4), count: messages.length }, 'Histórico carregado')
     return messages
