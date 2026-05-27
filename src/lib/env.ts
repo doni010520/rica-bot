@@ -88,6 +88,11 @@ const EnvSchema = z.object({
   // Se preenchida, ignora silenciosamente mensagens fora da lista.
   ALLOWED_PHONES: z.string().optional().default(''),
 
+  // ── Admin endpoint (/admin/logs) ─────────────────────────────────────────
+  // Token simples pra proteger leitura de logs in-memory via HTTP.
+  // Se vazio, endpoint aberto (desenvolvimento). Em prod, sempre setar.
+  ADMIN_TOKEN: z.string().optional().default(''),
+
   // ── Executivos (fonte de verdade — telefones e emails fora do repo) ──────
   // Telefones com DDI 55 (ex: 5511958430345). Validados no boot.
   EXEC_ANDRE_PHONE:        z.string().regex(/^55\d{10,11}$/, 'EXEC_ANDRE_PHONE: dígitos com DDI 55'),

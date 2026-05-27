@@ -16,6 +16,7 @@ import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
 import { startFollowupWorker } from './followup/worker.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
+import { logBuffer } from './observability/log-buffer.js'
 
 export async function buildApp() {
   const isDev = env.NODE_ENV !== 'production'
@@ -67,6 +68,42 @@ export async function buildApp() {
     return reply
       .code(report.overall === 'critical' ? 503 : 200)
       .send(report)
+  })
+
+  // ── /admin/logs — ring buffer dos últimos 2000 logs em memória ──────────
+  //   ?limit=N    quantas linhas (default 200, max 2000)
+  //   ?filter=X   substring case-insensitive
+  //   ?format=text  (default) ou ?format=json
+  // Header opcional: x-admin-token (obrigatório se ADMIN_TOKEN setado)
+  app.get('/admin/logs', async (request, reply) => {
+    if (env.ADMIN_TOKEN) {
+      const token = request.headers['x-admin-token']
+      if (token !== env.ADMIN_TOKEN) {
+        return reply.code(401).send({ error: 'unauthorized' })
+      }
+    }
+
+    const q = request.query as { limit?: string; filter?: string; format?: string }
+    const limit = Math.min(Math.max(parseInt(q.limit ?? '200', 10) || 200, 1), 2000)
+    const filter = q.filter?.trim() || undefined
+    const format = q.format ?? 'text'
+
+    const lines = logBuffer.tail(limit, filter)
+
+    if (format === 'json') {
+      return reply.send({
+        timestamp: new Date().toISOString(),
+        total_in_buffer: logBuffer.size(),
+        returned: lines.length,
+        filter: filter ?? null,
+        lines,
+      })
+    }
+
+    // text/plain — mais fácil de ler no curl
+    return reply
+      .type('text/plain; charset=utf-8')
+      .send(lines.join('\n') + '\n')
   })
 
   // ── webhook principal ───────────────────────────────────────────────────────
