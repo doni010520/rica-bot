@@ -1,6 +1,8 @@
 /**
  * tests/unit/webhook-schema.test.ts
- * Testes para parseWebhookPayload — garante que payloads do uazapi são parseados.
+ *
+ * Testes para parseWebhookPayload usando o formato real do uazapi (benitechlab).
+ * Confirmado em produção em 27/mai/2026.
  */
 
 import { describe, it, expect } from 'vitest'
@@ -9,157 +11,219 @@ import { parseWebhookPayload } from '../../src/uazapi/webhook-schema.js'
 // ─── fixtures ────────────────────────────────────────────────────────────────
 
 const textPayload = {
-  event: 'messages.upsert',
-  data: {
-    key: { remoteJid: '5511999887766@s.whatsapp.net', fromMe: false, id: 'MSG001' },
-    pushName: 'João Silva',
-    message: { conversation: 'Olá, quero saber sobre diagnóstico' },
-    messageType: 'conversation',
-    messageTimestamp: 1716389200,
+  BaseUrl: 'https://benitechlab.uazapi.com',
+  EventType: 'messages',
+  instanceName: 'RICA',
+  owner: '5511980143793',
+  chat: {
+    wa_name: 'João Silva',
+    wa_chatid: '5511999887766@s.whatsapp.net',
+    wa_isGroup: false,
+    name: 'João Silva',
   },
+  message: {
+    id: '5511980143793:MSG001',
+    messageid: 'MSG001',
+    chatid: '5511999887766@s.whatsapp.net',
+    fromMe: false,
+    text: 'Oi, quero saber sobre diagnóstico',
+    content: 'Oi, quero saber sobre diagnóstico',
+    type: 'text',
+    mediaType: '',
+    messageType: 'Conversation',
+    messageTimestamp: 1779888766000, // ms
+    senderName: 'João Silva',
+    sender: '126804715126897@lid',
+    sender_pn: '5511999887766@s.whatsapp.net',
+    isGroup: false,
+    wasSentByApi: false,
+  },
+  token: 'fake-token',
 }
 
 const audioPayload = {
-  event: 'messages.upsert',
-  data: {
-    key: { remoteJid: '5581988877766@s.whatsapp.net', fromMe: false, id: 'MSG002' },
-    pushName: 'Maria',
-    message: {
-      audioMessage: {
-        url: 'https://media.uazapi.com/audio/123.ogg',
-        mimetype: 'audio/ogg',
-        seconds: 12,
-      },
-    },
+  BaseUrl: 'https://benitechlab.uazapi.com',
+  EventType: 'messages',
+  instanceName: 'RICA',
+  chat: { wa_name: 'Maria', wa_chatid: '5581988877766@s.whatsapp.net', wa_isGroup: false },
+  message: {
+    messageid: 'MSG002',
+    chatid: '5581988877766@s.whatsapp.net',
+    fromMe: false,
+    type: 'audio',
+    mediaType: 'audio',
     messageType: 'audioMessage',
-    messageTimestamp: 1716389300,
+    messageTimestamp: 1779888800000,
+    senderName: 'Maria',
+    content: {
+      URL: 'https://media.uazapi.com/audio/123.enc',
+      mediaKey: 'fake-media-key',
+      mimetype: 'audio/ogg; codecs=opus',
+    },
   },
 }
 
 const imagePayload = {
-  event: 'messages.upsert',
-  data: {
-    key: { remoteJid: '5511999887766@s.whatsapp.net', fromMe: false, id: 'MSG003' },
-    pushName: 'Pedro',
-    message: {
-      imageMessage: {
-        url: 'https://media.uazapi.com/img/abc.jpg',
-        mimetype: 'image/jpeg',
-        caption: 'minha loja',
-      },
-    },
+  BaseUrl: 'https://benitechlab.uazapi.com',
+  EventType: 'messages',
+  instanceName: 'RICA',
+  chat: { wa_name: 'Pedro', wa_chatid: '5511999887766@s.whatsapp.net' },
+  message: {
+    messageid: 'MSG003',
+    chatid: '5511999887766@s.whatsapp.net',
+    fromMe: false,
+    type: 'image',
+    mediaType: 'image',
     messageType: 'imageMessage',
+    messageTimestamp: 1779888900000,
+    text: 'minha loja',
+    content: {
+      URL: 'https://media.uazapi.com/img/abc.enc',
+      mediaKey: 'fake-img-key',
+      mimetype: 'image/jpeg',
+    },
+    senderName: 'Pedro',
+  },
+}
+
+const documentPayload = {
+  BaseUrl: 'https://benitechlab.uazapi.com',
+  EventType: 'messages',
+  chat: { wa_name: 'Ana', wa_chatid: '5511960000000@s.whatsapp.net' },
+  message: {
+    messageid: 'MSG004',
+    chatid: '5511960000000@s.whatsapp.net',
+    fromMe: false,
+    type: 'document',
+    mediaType: 'document',
+    messageType: 'documentMessage',
+    messageTimestamp: 1779888950000,
+    content: {
+      URL: 'https://media.uazapi.com/doc/xyz.enc',
+      mediaKey: 'fake-doc-key',
+      mimetype: 'application/pdf',
+      fileName: 'proposta.pdf',
+    },
+    senderName: 'Ana',
   },
 }
 
 const fromMePayload = {
-  event: 'messages.upsert',
-  data: {
-    key: { remoteJid: '5581988877766@s.whatsapp.net', fromMe: true, id: 'MSG004' },
-    pushName: '',
-    message: { conversation: 'Roberta aqui!' },
-    messageType: 'conversation',
+  ...textPayload,
+  message: {
+    ...textPayload.message,
+    messageid: 'MSG_FROMME',
+    fromMe: true,
+    text: 'Roberta aqui!',
+    content: 'Roberta aqui!',
   },
 }
 
 const groupPayload = {
-  event: 'messages.upsert',
-  data: {
-    key: { remoteJid: '5511999-1620888@g.us', fromMe: false, id: 'MSG005' },
-    pushName: 'Grupo',
-    message: { conversation: 'oi grupo' },
+  BaseUrl: 'https://benitechlab.uazapi.com',
+  chat: { wa_chatid: '120363042-1234567@g.us', wa_isGroup: true },
+  message: {
+    messageid: 'MSG_GROUP',
+    chatid: '120363042-1234567@g.us',
+    fromMe: false,
+    text: 'mensagem de grupo',
+    isGroup: true,
+    type: 'text',
+    messageType: 'Conversation',
+    messageTimestamp: 1779889000000,
   },
 }
 
-// ─── testes ──────────────────────────────────────────────────────────────────
+const revokePayload = {
+  ...textPayload,
+  message: {
+    ...textPayload.message,
+    messageid: 'MSG_REV',
+    messageType: 'revokeMessage',
+  },
+}
 
-describe('parseWebhookPayload()', () => {
-  describe('mensagem de texto', () => {
-    it('parseia corretamente', () => {
-      const result = parseWebhookPayload(textPayload)
-      expect(result).not.toBeNull()
-      expect(result?.mediaType).toBe('text')
-      expect(result?.text).toBe('Olá, quero saber sobre diagnóstico')
-      expect(result?.fromMe).toBe(false)
-      expect(result?.phone).toBe('5511999887766')
-      expect(result?.displayName).toBe('João Silva')
+// ─── testes ───────────────────────────────────────────────────────────────────
+
+describe('parseWebhookPayload — formato uazapi nativo', () => {
+  describe('texto', () => {
+    it('extrai phone, fromMe, messageId, displayName e texto', () => {
+      const r = parseWebhookPayload(textPayload)
+      expect(r).not.toBeNull()
+      expect(r!.phone).toBe('5511999887766')
+      expect(r!.fromMe).toBe(false)
+      expect(r!.messageId).toBe('MSG001')
+      expect(r!.displayName).toBe('João Silva')
+      expect(r!.mediaType).toBe('text')
+      expect(r!.text).toBe('Oi, quero saber sobre diagnóstico')
+      expect(r!.isRevoke).toBe(false)
+    })
+
+    it('converte timestamp em ms pra segundos', () => {
+      const r = parseWebhookPayload(textPayload)
+      // 1779888766000 ms = 1779888766 s
+      expect(r!.timestamp).toBe(1779888766)
     })
   })
 
-  describe('mensagem de áudio', () => {
-    it('parseia corretamente', () => {
-      const result = parseWebhookPayload(audioPayload)
-      expect(result).not.toBeNull()
-      expect(result?.mediaType).toBe('audio')
-      expect(result?.audioUrl).toBe('https://media.uazapi.com/audio/123.ogg')
-      expect(result?.mimetype).toBe('audio/ogg')
-      expect(result?.text).toBeNull()
+  describe('áudio', () => {
+    it('extrai audioUrl e mimetype', () => {
+      const r = parseWebhookPayload(audioPayload)
+      expect(r!.mediaType).toBe('audio')
+      expect(r!.audioUrl).toBe('https://media.uazapi.com/audio/123.enc')
+      expect(r!.mimetype).toBe('audio/ogg; codecs=opus')
+      expect(r!.text).toBeNull()
     })
   })
 
-  describe('mensagem de imagem com legenda', () => {
-    it('parseia corretamente', () => {
-      const result = parseWebhookPayload(imagePayload)
-      expect(result).not.toBeNull()
-      expect(result?.mediaType).toBe('image')
-      expect(result?.imageUrl).toBe('https://media.uazapi.com/img/abc.jpg')
-      expect(result?.text).toBe('minha loja') // legenda
+  describe('imagem', () => {
+    it('extrai imageUrl e caption', () => {
+      const r = parseWebhookPayload(imagePayload)
+      expect(r!.mediaType).toBe('image')
+      expect(r!.imageUrl).toBe('https://media.uazapi.com/img/abc.enc')
+      expect(r!.text).toBe('minha loja')
+      expect(r!.mimetype).toBe('image/jpeg')
     })
   })
 
-  describe('mensagem fromMe=true', () => {
-    it('parseia com fromMe=true', () => {
-      const result = parseWebhookPayload(fromMePayload)
-      expect(result).not.toBeNull()
-      expect(result?.fromMe).toBe(true)
-      expect(result?.text).toBe('Roberta aqui!')
+  describe('documento', () => {
+    it('extrai documentUrl e mimetype', () => {
+      const r = parseWebhookPayload(documentPayload)
+      expect(r!.mediaType).toBe('document')
+      expect(r!.documentUrl).toBe('https://media.uazapi.com/doc/xyz.enc')
+      expect(r!.mimetype).toBe('application/pdf')
     })
   })
 
-  describe('mensagem de grupo', () => {
-    it('retorna null (grupos ignorados)', () => {
-      const result = parseWebhookPayload(groupPayload)
-      expect(result).toBeNull()
+  describe('flags', () => {
+    it('detecta fromMe=true', () => {
+      const r = parseWebhookPayload(fromMePayload)
+      expect(r!.fromMe).toBe(true)
+    })
+
+    it('rejeita mensagens de grupo (retorna null)', () => {
+      const r = parseWebhookPayload(groupPayload)
+      expect(r).toBeNull()
+    })
+
+    it('detecta REVOKE via messageType', () => {
+      const r = parseWebhookPayload(revokePayload)
+      expect(r!.isRevoke).toBe(true)
     })
   })
 
-  describe('payload inválido', () => {
-    it('retorna null para payload vazio', () => {
+  describe('payloads inválidos', () => {
+    it('retorna null pra payload completamente vazio', () => {
       expect(parseWebhookPayload({})).toBeNull()
     })
-    it('retorna null para null', () => {
+
+    it('retorna null pra payload com message vazia', () => {
+      expect(parseWebhookPayload({ message: {} })).toBeNull()
+    })
+
+    it('retorna null pra payload null/undefined', () => {
       expect(parseWebhookPayload(null)).toBeNull()
-    })
-    it('retorna null para string', () => {
-      expect(parseWebhookPayload('texto')).toBeNull()
-    })
-    it('retorna null sem key', () => {
-      expect(parseWebhookPayload({ data: {} })).toBeNull()
-    })
-  })
-
-  describe('extração de telefone', () => {
-    it('remove @s.whatsapp.net do remoteJid', () => {
-      const result = parseWebhookPayload(textPayload)
-      expect(result?.phone).not.toContain('@')
-    })
-    it('preserva código do país', () => {
-      const result = parseWebhookPayload(textPayload)
-      expect(result?.phone).toBe('5511999887766')
-    })
-  })
-
-  describe('timestamp', () => {
-    it('converte messageTimestamp para número', () => {
-      const result = parseWebhookPayload(textPayload)
-      expect(typeof result?.timestamp).toBe('number')
-      expect(result?.timestamp).toBe(1716389200)
-    })
-    it('usa Date.now() quando timestamp ausente', () => {
-      const payload = { ...textPayload, data: { ...textPayload.data, messageTimestamp: undefined } }
-      const before = Date.now() / 1000 - 1
-      const result = parseWebhookPayload(payload)
-      expect(result?.timestamp).toBeGreaterThan(before)
+      expect(parseWebhookPayload(undefined)).toBeNull()
     })
   })
 })

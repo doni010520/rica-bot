@@ -1,16 +1,33 @@
 /**
  * src/uazapi/webhook-schema.ts
  *
- * Schema Zod do payload que o uazapi envia no webhook.
+ * Schema Zod do payload que o uazapi (benitechlab) envia no webhook.
  *
- * O uazapi segue o formato da Evolution API / Baileys.
- * Campos extraídos pelo nó Get_Info do n8n:
- *   full_name, telefone, message, image_url, audio_url, pdf_url,
- *   tipo (mediaType), mediaKey, mimetype, token, host, remoteJid, id
+ * Formato confirmado em 27/mai/2026 — diferente do Evolution API.
+ * Estrutura real:
+ *   {
+ *     "BaseUrl": "...",
+ *     "EventType": "messages",
+ *     "instanceName": "RICA",
+ *     "owner": "...",
+ *     "chat":    { wa_name, wa_chatid, name, ... },
+ *     "message": { id, chatid, fromMe, text, content, type, mediaType,
+ *                  messageType, messageTimestamp, messageid, senderName, ... },
+ *     "token":   "..."
+ *   }
  *
- * NOTA: O schema é permissivo em campos opcionais (safeParse + .optional())
- * porque o payload varia dependendo do tipo de mídia.
- * Zod valida os campos que usamos; extras são ignorados.
+ * Replica a extração do nó Get_Info do n8n:
+ *   full_name  = body.chat.wa_name
+ *   telefone   = body.chat.wa_chatid.split('@').first()
+ *   message    = body.message.text
+ *   image_url  = body.message.content.URL
+ *   audio_url  = body.message.content.URL
+ *   pdf_url    = body.message.documentMessage.url
+ *   tipo       = body.message.messageType
+ *   mediaKey   = body.message.content.mediaKey
+ *   mimetype   = body.message.content.mimetype
+ *   remoteJid  = body.message.chatid
+ *   id         = body.message.messageid
  */
 
 import { z } from 'zod'
@@ -21,81 +38,84 @@ export type MediaType = 'text' | 'audio' | 'image' | 'document' | 'other'
 
 // ─── sub-schemas ──────────────────────────────────────────────────────────────
 
-const MessageKeySchema = z.object({
-  remoteJid: z.string(),            // ex: "5511999887766@s.whatsapp.net"
-  fromMe: z.boolean(),
-  id: z.string(),
-})
+/**
+ * `message.content` pode vir como:
+ *   - string (texto puro)
+ *   - objeto com URL/mediaKey/mimetype (mídia)
+ *   - vazio/undefined
+ *
+ * Tratamos com union pra cobrir os casos.
+ */
+const MessageContentSchema = z.union([
+  z.string(),
+  z
+    .object({
+      URL: z.string().optional(),
+      url: z.string().optional(),
+      mediaKey: z.string().optional(),
+      mimetype: z.string().optional(),
+      fileName: z.string().optional(),
+      caption: z.string().optional(),
+    })
+    .passthrough(),
+  z.null(),
+])
 
-const AudioMessageSchema = z.object({
-  url: z.string().optional(),
-  mimetype: z.string().optional(),
-  fileLength: z.union([z.string(), z.number()]).optional(),
-  seconds: z.number().optional(),
-  mediaKey: z.string().optional(),
-  directPath: z.string().optional(),
-})
+const ChatSchema = z
+  .object({
+    wa_name: z.string().optional(),
+    wa_chatid: z.string().optional(),
+    wa_isGroup: z.boolean().optional(),
+    name: z.string().optional(),
+    lead_name: z.string().optional(),
+  })
+  .passthrough()
+  .optional()
 
-const ImageMessageSchema = z.object({
-  url: z.string().optional(),
-  mimetype: z.string().optional(),
-  fileLength: z.union([z.string(), z.number()]).optional(),
-  mediaKey: z.string().optional(),
-  directPath: z.string().optional(),
-  caption: z.string().optional(),
-})
-
-const DocumentMessageSchema = z.object({
-  url: z.string().optional(),
-  mimetype: z.string().optional(),
-  fileLength: z.union([z.string(), z.number()]).optional(),
-  mediaKey: z.string().optional(),
-  directPath: z.string().optional(),
-  fileName: z.string().optional(),
-  title: z.string().optional(),
-})
-
-const MessageContentSchema = z.object({
-  conversation: z.string().optional(),          // texto simples
-  extendedTextMessage: z.object({
-    text: z.string(),
-  }).optional(),
-  audioMessage: AudioMessageSchema.optional(),
-  imageMessage: ImageMessageSchema.optional(),
-  documentMessage: DocumentMessageSchema.optional(),
-  documentWithCaptionMessage: z.object({
-    message: z.object({
-      documentMessage: DocumentMessageSchema,
-    }),
-  }).optional(),
-})
+const MessageSchema = z
+  .object({
+    id: z.string().optional(),
+    messageid: z.string().optional(),
+    chatid: z.string().optional(),
+    fromMe: z.boolean().optional(),
+    text: z.string().optional(),
+    content: MessageContentSchema.optional(),
+    type: z.string().optional(),           // 'text' | 'audio' | 'image' | 'document'
+    mediaType: z.string().optional(),       // 'audio' | 'image' | 'document' (vazio quando texto)
+    messageType: z.string().optional(),     // 'Conversation' | 'audioMessage' | 'imageMessage' | 'documentMessage' | 'revokeMessage'
+    messageTimestamp: z.union([z.string(), z.number()]).optional(),
+    senderName: z.string().optional(),
+    sender: z.string().optional(),
+    sender_pn: z.string().optional(),
+    isGroup: z.boolean().optional(),
+    wasSentByApi: z.boolean().optional(),
+    // legacy / sub-estruturas que o n8n também olha
+    documentMessage: z
+      .object({
+        url: z.string().optional(),
+        mimetype: z.string().optional(),
+        fileName: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough()
+  .optional()
 
 // ─── schema principal ─────────────────────────────────────────────────────────
 
-export const UazapiWebhookSchema = z.object({
-  event: z.string().optional(),
-  instance: z.string().optional(),
-  // notification=REVOKE: cliente apagou a mensagem — deve ser ignorada
-  notification: z.string().optional(),
-  data: z.object({
-    key: MessageKeySchema,
-    pushName: z.string().optional(),
-    message: MessageContentSchema.optional(),
-    messageType: z.string().optional(),
-    messageTimestamp: z.union([z.string(), z.number()]).optional(),
-    mediaUrl: z.string().optional(),
-    audioUrl: z.string().optional(),
-    imageUrl: z.string().optional(),
-    // notification também pode vir dentro de data
-    notification: z.string().optional(),
-  }),
-  token: z.string().optional(),
-  key: MessageKeySchema.optional(),
-  pushName: z.string().optional(),
-  message: MessageContentSchema.optional(),
-  messageType: z.string().optional(),
-  messageTimestamp: z.union([z.string(), z.number()]).optional(),
-})
+export const UazapiWebhookSchema = z
+  .object({
+    BaseUrl: z.string().optional(),
+    EventType: z.string().optional(),
+    instanceName: z.string().optional(),
+    owner: z.string().optional(),
+    chatSource: z.string().optional(),
+    chat: ChatSchema,
+    message: MessageSchema,
+    token: z.string().optional(),
+  })
+  .passthrough()
 
 export type UazapiWebhook = z.infer<typeof UazapiWebhookSchema>
 
@@ -122,9 +142,9 @@ export type ParsedMessage = {
   documentUrl: string | null
   /** Mimetype do arquivo de mídia */
   mimetype: string | null
-  /** Timestamp Unix da mensagem */
+  /** Timestamp Unix (segundos) da mensagem */
   timestamp: number
-  /** true se cliente apagou a mensagem (notification=REVOKE) — deve ser ignorada */
+  /** true se cliente apagou a mensagem (revokeMessage) — deve ser ignorada */
   isRevoke: boolean
 }
 
@@ -137,37 +157,46 @@ export function parseWebhookPayload(raw: unknown): ParsedMessage | null {
   if (!result.success) return null
 
   const payload = result.data
+  const msg = payload.message
+  const chat = payload.chat
 
-  // Normaliza key e message — podem estar na raiz ou dentro de data
-  const key = payload.data.key ?? payload.key
-  const messageContent = payload.data.message ?? payload.message
-  const pushName = payload.data.pushName ?? payload.pushName ?? ''
-  const messageType = payload.data.messageType ?? payload.messageType
-  const timestamp = Number(payload.data.messageTimestamp ?? payload.messageTimestamp ?? Date.now() / 1000)
+  // Sem `message` ou sem identificadores básicos, não tem como processar
+  if (!msg) return null
 
-  // Detecta REVOKE (cliente apagou a mensagem)
-  const isRevoke =
-    payload.notification === 'REVOKE' ||
-    payload.data.notification === 'REVOKE' ||
-    messageType === 'revokeMessage'
-
-  if (!key) return null
-
-  const { remoteJid, fromMe, id } = key
-
-  // Extrai telefone do remoteJid (remove @s.whatsapp.net e grupos)
-  const rawPhone = remoteJid.replace(/@.*/, '')
+  // Identifica telefone: prioridade chatid > chat.wa_chatid > sender_pn
+  const chatId = msg.chatid ?? chat?.wa_chatid ?? msg.sender_pn ?? ''
+  const rawPhone = chatId.replace(/@.*/, '').trim()
+  if (!rawPhone) return null
   // Grupos têm "-" no número — ignorar
   if (rawPhone.includes('-')) return null
+  // Flag explícita de grupo (caso disponível)
+  if (msg.isGroup || chat?.wa_isGroup) return null
 
-  const { mediaType, text, audioUrl, imageUrl, documentUrl, mimetype } =
-    extractMediaInfo(messageContent, payload.data.audioUrl ?? payload.data.imageUrl, messageType)
+  // ID da mensagem (obrigatório p/ logging e dedup)
+  const messageId = msg.messageid ?? msg.id ?? ''
+  if (!messageId) return null
+
+  // fromMe (default false se ausente)
+  const fromMe = msg.fromMe ?? false
+
+  // Nome do contato
+  const displayName = msg.senderName ?? chat?.wa_name ?? chat?.name ?? chat?.lead_name ?? ''
+
+  // REVOKE — cliente apagou a mensagem
+  const isRevoke = msg.messageType === 'revokeMessage' || msg.type === 'revoke'
+
+  // Timestamp: pode vir em ms (uazapi) ou s. Normaliza pra segundos Unix.
+  let timestamp = Number(msg.messageTimestamp ?? Date.now() / 1000)
+  if (timestamp > 9_999_999_999) timestamp = Math.floor(timestamp / 1000)
+
+  // Mídia
+  const { mediaType, text, audioUrl, imageUrl, documentUrl, mimetype } = extractMediaInfo(msg)
 
   return {
     phone: rawPhone,
     fromMe,
-    messageId: id,
-    displayName: pushName,
+    messageId,
+    displayName,
     mediaType,
     text,
     audioUrl,
@@ -181,11 +210,13 @@ export function parseWebhookPayload(raw: unknown): ParsedMessage | null {
 
 // ─── extração de mídia ───────────────────────────────────────────────────────
 
-function extractMediaInfo(
-  msg: z.infer<typeof MessageContentSchema> | undefined,
-  preResolvedUrl: string | undefined,
-  messageType: string | undefined,
-): {
+/**
+ * Extrai mídia e texto do `message` do uazapi.
+ *
+ * mediaType vem em `message.type` ('text' | 'audio' | 'image' | 'document').
+ * Mídia (URL, mediaKey, mimetype) vem dentro de `message.content` quando é objeto.
+ */
+function extractMediaInfo(msg: z.infer<typeof MessageSchema> & object): {
   mediaType: MediaType
   text: string | null
   audioUrl: string | null
@@ -193,57 +224,67 @@ function extractMediaInfo(
   documentUrl: string | null
   mimetype: string | null
 } {
-  if (!msg) {
-    return { mediaType: 'text', text: null, audioUrl: null, imageUrl: null, documentUrl: null, mimetype: null }
-  }
+  const type = (msg.type ?? '').toLowerCase()
+  const messageType = (msg.messageType ?? '').toLowerCase()
+  const mediaTypeRaw = (msg.mediaType ?? '').toLowerCase()
 
-  // Texto simples
-  if (msg.conversation) {
-    return { mediaType: 'text', text: msg.conversation, audioUrl: null, imageUrl: null, documentUrl: null, mimetype: null }
-  }
+  // Texto: tanto `text` quanto `content` (quando é string) servem
+  const textFromContent = typeof msg.content === 'string' ? msg.content : null
+  const text = msg.text ?? textFromContent ?? null
 
-  // Texto estendido (links, menções, formatado)
-  if (msg.extendedTextMessage) {
-    return { mediaType: 'text', text: msg.extendedTextMessage.text, audioUrl: null, imageUrl: null, documentUrl: null, mimetype: null }
-  }
+  // Mídia: content como objeto contém URL/mediaKey/mimetype
+  const contentObj =
+    msg.content && typeof msg.content === 'object' && !Array.isArray(msg.content)
+      ? msg.content
+      : null
+  const mediaUrl = contentObj?.URL ?? contentObj?.url ?? null
+  const mediaMimetype = contentObj?.mimetype ?? null
 
-  // Áudio
-  if (msg.audioMessage || messageType === 'audioMessage') {
-    const audio = msg.audioMessage
+  // Audio
+  if (type === 'audio' || mediaTypeRaw === 'audio' || messageType === 'audiomessage') {
     return {
       mediaType: 'audio',
       text: null,
-      audioUrl: audio?.url ?? preResolvedUrl ?? null,
+      audioUrl: mediaUrl,
       imageUrl: null,
       documentUrl: null,
-      mimetype: audio?.mimetype ?? 'audio/ogg',
+      mimetype: mediaMimetype ?? 'audio/ogg',
     }
   }
 
-  // Imagem
-  if (msg.imageMessage || messageType === 'imageMessage') {
-    const image = msg.imageMessage
+  // Image
+  if (type === 'image' || mediaTypeRaw === 'image' || messageType === 'imagemessage') {
     return {
       mediaType: 'image',
-      text: image?.caption ?? null,
+      // imagem pode vir com caption no .text
+      text: text,
       audioUrl: null,
-      imageUrl: image?.url ?? preResolvedUrl ?? null,
+      imageUrl: mediaUrl,
       documentUrl: null,
-      mimetype: image?.mimetype ?? 'image/jpeg',
+      mimetype: mediaMimetype ?? 'image/jpeg',
     }
   }
 
-  // Documento / PDF
-  if (msg.documentMessage || msg.documentWithCaptionMessage || messageType?.includes('document')) {
-    const doc = msg.documentMessage ?? msg.documentWithCaptionMessage?.message.documentMessage
+  // Document / PDF
+  if (
+    type === 'document' ||
+    mediaTypeRaw === 'document' ||
+    messageType === 'documentmessage' ||
+    msg.documentMessage
+  ) {
     return {
       mediaType: 'document',
       text: null,
       audioUrl: null,
       imageUrl: null,
-      documentUrl: doc?.url ?? preResolvedUrl ?? null,
-      mimetype: doc?.mimetype ?? 'application/octet-stream',
+      documentUrl: mediaUrl ?? msg.documentMessage?.url ?? null,
+      mimetype: mediaMimetype ?? msg.documentMessage?.mimetype ?? 'application/octet-stream',
     }
+  }
+
+  // Texto (padrão)
+  if (text) {
+    return { mediaType: 'text', text, audioUrl: null, imageUrl: null, documentUrl: null, mimetype: null }
   }
 
   return { mediaType: 'other', text: null, audioUrl: null, imageUrl: null, documentUrl: null, mimetype: null }
