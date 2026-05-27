@@ -29,8 +29,24 @@ import { buildAllTools } from '../tools/index.js'
 import { runRica } from '../agent/rica.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { logger, webhookLogger } from '../observability/logger.js'
+import { env } from '../lib/env.js'
 
 export type WebhookHandlerDeps = { pool: Pool }
+
+// ─── Allowlist (modo teste isolado) ──────────────────────────────────────────
+// Se ALLOWED_PHONES estiver vazia → processa todos os webhooks (produção).
+// Se preenchida → ignora silenciosamente mensagens fora da lista.
+const ALLOWED_PHONES = env.ALLOWED_PHONES
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean)
+const ALLOWLIST_ACTIVE = ALLOWED_PHONES.length > 0
+if (ALLOWLIST_ACTIVE) {
+  logger.warn(
+    { allowed: ALLOWED_PHONES },
+    '🚧 ALLOWED_PHONES configurado — modo teste isolado ativo',
+  )
+}
 
 // ─── handler de entrada (rápido — só enfileira) ───────────────────────────────
 
@@ -43,6 +59,12 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
 
   const phone = normalizePhone(parsed.phone)
   const log = webhookLogger(phone, parsed.messageId)
+
+  // Allowlist: ignora silenciosamente quem não está na lista (modo teste)
+  if (ALLOWLIST_ACTIVE && !ALLOWED_PHONES.includes(phone)) {
+    log.debug({ phone: phone.slice(-4) }, 'ignored_by_allowlist')
+    return
+  }
 
   if (parsed.fromMe) {
     await handleFromMe(phone, parsed.text ?? '', deps.pool, log)

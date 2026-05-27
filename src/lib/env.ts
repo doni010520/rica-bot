@@ -82,6 +82,12 @@ const EnvSchema = z.object({
   // ── Observabilidade ───────────────────────────────────────────────────────
   ALERT_WEBHOOK_URL: z.string().url().optional().or(z.literal('')),
 
+  // ── Allowlist (modo de teste isolado) ────────────────────────────────────
+  // Lista de telefones separados por vírgula (com DDI 55, ex: "5511999...,5581988...")
+  // Se vazia, processa TODOS os webhooks (modo produção).
+  // Se preenchida, ignora silenciosamente mensagens fora da lista.
+  ALLOWED_PHONES: z.string().optional().default(''),
+
   // ── Executivos (fonte de verdade — telefones e emails fora do repo) ──────
   // Telefones com DDI 55 (ex: 5511958430345). Validados no boot.
   EXEC_ANDRE_PHONE:        z.string().regex(/^55\d{10,11}$/, 'EXEC_ANDRE_PHONE: dígitos com DDI 55'),
