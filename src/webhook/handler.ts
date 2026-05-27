@@ -1,0 +1,169 @@
+/**
+ * src/webhook/handler.ts
+ *
+ * Orquestrador Sprint 2 — fluxo completo com CRM, candidato e tools.
+ *
+ * Fluxo buffered (após 10s):
+ *   1. detectAdminCommand → REVOKE/limpar/treino/disparos ou atendimento
+ *   2. preFetchCrm → busca/cria contato no CRM
+ *   3. saveMessage (in)
+ *   4. isJobCandidate → se true: notifyHR + return
+ *   5. runRica com tools + CrmContext real
+ *   6. saveMessage (out)
+ *   7. sendWhatsAppChunked
+ */
+
+import type { Pool } from 'pg'
+import { parseWebhookPayload } from '../uazapi/webhook-schema.js'
+import { normalizePhone } from '../uazapi/normalize-phone.js'
+import { checkLidiaStatus, createLeadEntry, setLidiaStatus, detectTakeoverCommand } from '../lidia/status.js'
+import { resetFollowup } from '../crm/reset-followup.js'
+import { preFetchCrm } from '../crm/pre-fetch.js'
+import { saveMessage } from '../crm/save-message.js'
+import { resolveMessageText } from '../media/processors.js'
+import { getMessageBuffer, type BufferedMessage } from '../buffer/message-buffer.js'
+import { detectAdminCommand } from '../commands/admin.js'
+import { clearChatHistory } from '../memory/postgres-chat.js'
+import { isJobCandidate, notifyHR } from '../candidato/detect.js'
+import { buildAllTools } from '../tools/index.js'
+import { runRica } from '../agent/rica.js'
+import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
+import { logger, webhookLogger } from '../observability/logger.js'
+
+export type WebhookHandlerDeps = { pool: Pool }
+
+// ─── handler de entrada (rápido — só enfileira) ───────────────────────────────
+
+export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps): Promise<void> {
+  const parsed = parseWebhookPayload(rawBody)
+  if (!parsed) {
+    logger.warn('Webhook: payload inválido — ignorando')
+    return
+  }
+
+  const phone = normalizePhone(parsed.phone)
+  const log = webhookLogger(phone, parsed.messageId)
+
+  if (parsed.fromMe) {
+    await handleFromMe(phone, parsed.text ?? '', deps.pool, log)
+    return
+  }
+
+  resetFollowup(phone)
+
+  const lidiaResult = await checkLidiaStatus(deps.pool, phone)
+  if (!lidiaResult.exists) {
+    await createLeadEntry(deps.pool, { phone, name: parsed.displayName })
+  } else if (lidiaResult.lidia === 'OFF') {
+    log.info('lidia_off — skip')
+    return
+  }
+
+  let messageText: string
+  try {
+    messageText = await resolveMessageText(parsed)
+  } catch (err) {
+    log.error({ err, mediaType: parsed.mediaType }, 'Falha ao processar mídia')
+    messageText = parsed.text ?? '[Mensagem recebida]'
+  }
+
+  if (!messageText.trim()) return
+
+  // Detecta comando admin ANTES do buffer (REVOKE e LimparDados são síncronos)
+  const rawText = parsed.text ?? messageText
+  const cmd = detectAdminCommand(rawText, parsed.isRevoke)
+
+  if (cmd === 'revoke') {
+    log.debug('REVOKE — ignorando')
+    return
+  }
+
+  if (cmd === 'limpar') {
+    await clearChatHistory(deps.pool, phone)
+    await sendWhatsApp(phone, 'Memória limpa! podemos começar do zero.')
+    log.info('Memória limpa por LimparDados')
+    return
+  }
+
+  if (cmd === 'treino' || cmd === 'disparos') {
+    log.info({ cmd }, 'Comando admin — Sprint 5+')
+    return
+  }
+
+  // Fluxo normal: enfileira no buffer
+  await getMessageBuffer().push(phone, messageText)
+  log.debug({ mediaType: parsed.mediaType }, 'Mensagem no buffer')
+}
+
+// ─── handler do worker (fluxo completo) ──────────────────────────────────────
+
+export async function handleBufferedMessage(
+  msg: BufferedMessage,
+  deps: WebhookHandlerDeps,
+): Promise<void> {
+  const { phone, combinedText } = msg
+  const log = webhookLogger(phone)
+
+  log.info({ messageCount: msg.messageCount }, 'Processando buffer')
+
+  // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
+  const crm = await preFetchCrm(phone, '')
+
+  // 2. Salvar mensagem do cliente (direction=in) — fire-and-forget
+  saveMessage({
+    phone,
+    direction: 'in',
+    text: combinedText,
+    sender: 'cliente',
+    dealId: crm.dealId,
+  })
+
+  // 3. Detecta candidato (IF_Candidato) — ANTES do agent
+  if (isJobCandidate(combinedText)) {
+    log.info('Candidato detectado — notificando RH')
+    await notifyHR({
+      candidatePhone: phone,
+      candidateName: crm.contactName ?? '',
+      candidateMessage: combinedText,
+    })
+    return // Rica não responde para candidatos
+  }
+
+  // 4. Executa agent com tools e CrmContext real
+  const tools = buildAllTools(phone, deps.pool)
+  const result = await runRica({ phone, displayName: crm.contactName ?? '', userMessage: combinedText, crm, tools }, deps.pool)
+
+  if (result.usedFallback || !result.text) {
+    await sendFallbackMessage(phone)
+    log.warn('Fallback enviado')
+    return
+  }
+
+  // 5. Salvar resposta da Rica (direction=out) — fire-and-forget
+  saveMessage({
+    phone,
+    direction: 'out',
+    text: result.text,
+    sender: 'rica_ai',
+    dealId: crm.dealId,
+  })
+
+  // 6. Envia em chunks com delay
+  await sendWhatsAppChunked(phone, result.text)
+  log.info({ chunks: result.text.split('\n\n').filter(Boolean).length }, 'Resposta enviada')
+}
+
+// ─── fromMe handler ───────────────────────────────────────────────────────────
+
+async function handleFromMe(
+  phone: string,
+  text: string,
+  pool: Pool,
+  log: ReturnType<typeof webhookLogger>,
+): Promise<void> {
+  const newStatus = detectTakeoverCommand(text)
+  if (newStatus) {
+    await setLidiaStatus(pool, phone, newStatus)
+    log.info({ newStatus }, 'Takeover detectado')
+  }
+}
