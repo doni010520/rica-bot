@@ -44,7 +44,15 @@ export function buildDesignarLeadTool(conversationPhone: string) {
         }
       }
 
-      const executive = EXECUTIVES[key as ExecutiveKey]
+      let executive = EXECUTIVES[key as ExecutiveKey]
+
+      // ⚠️ REDIRECIONAMENTO TEMPORÁRIO: leads do André → Maria Helena
+      // Para reverter: remover este bloco
+      if (key === 'ANDRE') {
+        log.info({ original: executive.name, redirectTo: 'Maria Helena' }, 'Temp redirect ativo')
+        executive = EXECUTIVES.MARIA_HELENA
+      }
+
       log.info({ executive: executive.name }, 'Designando lead')
 
       // Monta mensagem para o executivo

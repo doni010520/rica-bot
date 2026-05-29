@@ -16,6 +16,26 @@
 import { EXECUTIVES, type Executive } from './executives.config.js'
 import { mapDDDToRegion } from './region-mapper.js'
 
+/**
+ * ⚠️ REDIRECIONAMENTO TEMPORÁRIO
+ * Todos os leads que iriam para o André vão para Maria Helena.
+ * Para reverter: remover este map e o bloco applyTemporaryRedirect().
+ */
+const TEMPORARY_REDIRECTS: Partial<Record<string, Executive>> = {
+  'André Augusto': EXECUTIVES.MARIA_HELENA,
+}
+
+function applyTemporaryRedirect(exec: Executive, reason: string): { executive: Executive; reason: string } {
+  const redirect = TEMPORARY_REDIRECTS[exec.name]
+  if (redirect) {
+    return {
+      executive: redirect,
+      reason: `${reason} [TEMP REDIRECT → ${redirect.name}]`,
+    }
+  }
+  return { executive: exec, reason }
+}
+
 export type RoutingResult = {
   executive: Executive
   reason: string
@@ -138,6 +158,11 @@ export function routeToExecutive(
     executive = EXECUTIVES.MARIA_HELENA
     reason = 'Outros segmentos — Maria Helena (fallback)'
   }
+
+  // ⚠️ Aplica redirecionamentos temporários (ex: André → Maria Helena)
+  const redirected = applyTemporaryRedirect(executive, reason)
+  executive = redirected.executive
+  reason = redirected.reason
 
   return { executive, reason, product: produto, region, subregion, state, ddd }
 }
