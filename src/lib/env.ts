@@ -50,7 +50,7 @@ const EnvSchema = z.object({
   // ── Follow-up (executivos — cobrança de status) ────────────────────────────
   // Após encaminhar lead, Rica cobra o executivo N horas depois.
   EXEC_FOLLOWUP_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
-  EXEC_FOLLOWUP_DELAY_HOURS: intStr(14),
+  EXEC_FOLLOWUP_DELAY_HOURS: intStr(24),
 
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),

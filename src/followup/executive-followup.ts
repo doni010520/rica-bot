@@ -1,11 +1,13 @@
 /**
  * src/followup/executive-followup.ts
  *
- * Cobrança de status ao executivo — 14h após encaminhamento de lead.
+ * Cobrança de status ao executivo — 24h após encaminhamento de lead.
+ * Exceção: se o horário calculado cair no domingo → adia para segunda 09h BRT.
+ * Sábado é válido (diferente do calculateBusinessHourDelayMs).
  *
  * Fluxo:
  *   1. notificar_equipe ou designar_lead chama scheduleExecutiveFollowup()
- *   2. BullMQ agenda job com delay calculado (≥14h, horário comercial BRT)
+ *   2. BullMQ agenda job com delay de 24h (exceto domingo)
  *   3. Worker dispara: envia WhatsApp para executivo + cópia Maria Helena
  *   4. Registra atividade no CRM (deal)
  *
@@ -77,7 +79,7 @@ export async function scheduleExecutiveFollowup(data: ExecFollowupData): Promise
   }
 
   const queue = getQueue()
-  const delayMs = calculateBusinessHourDelayMs(env.EXEC_FOLLOWUP_DELAY_HOURS)
+  const delayMs = calculateFollowupDelayMs(env.EXEC_FOLLOWUP_DELAY_HOURS)
 
   // jobId sem ":" — BullMQ usa ":" como separador interno
   const jobId = `exec-fu-${data.executivePhone}-${data.leadPhone}`
@@ -209,17 +211,59 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
 // ─── cálculo de delay ────────────────────────────────────────────────────────
 
 /**
+ * Calcula delay para o followup de executivos.
+ * Regra: exatamente N horas após o encaminhamento.
+ * ÚNICA exceção: se cair no domingo BRT → empurra para segunda 09h BRT.
+ * Sábado é válido (não pula para segunda como calculateBusinessHourDelayMs fazia).
+ */
+function calculateFollowupDelayMs(hours: number): number {
+  const now = Date.now()
+  const rawTarget = new Date(now + hours * 3_600_000)
+
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    weekday: 'short',
+  }).formatToParts(rawTarget)
+  const weekday = parts.find((p) => p.type === 'weekday')?.value.toLowerCase() ?? ''
+
+  if (weekday.startsWith('dom')) {
+    return nextMondayNineAMBRT(rawTarget).getTime() - now
+  }
+
+  return hours * 3_600_000
+}
+
+/**
+ * Dado um Date que cai num domingo BRT, retorna segunda-feira seguinte às 09:00 BRT.
+ */
+function nextMondayNineAMBRT(from: Date): Date {
+  let candidate = new Date(from.getTime() + 24 * 3_600_000)
+  for (let i = 0; i < 7; i++) {
+    const parts = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      weekday: 'short',
+    }).formatToParts(candidate)
+    const wd = parts.find((p) => p.type === 'weekday')?.value.toLowerCase() ?? ''
+    if (wd.startsWith('seg')) {
+      const dateParts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).formatToParts(candidate).map((p) => [p.type, p.value]),
+      )
+      return new Date(`${dateParts['year']}-${dateParts['month']}-${dateParts['day']}T09:00:00-03:00`)
+    }
+    candidate = new Date(candidate.getTime() + 24 * 3_600_000)
+  }
+  return candidate
+}
+
+/**
  * Calcula delay em ms para que o job dispare ≥ N horas depois,
  * ajustado para cair em horário comercial (9h–18h seg-sex BRT).
- *
- * Exemplos (com hours=14):
- *   Seg 10h BRT → +14h = Ter 00h → fora → próx 9h útil = Ter 9h BRT
- *   Seg 15h BRT → +14h = Ter 05h → fora → próx 9h útil = Ter 9h BRT
- *   Sex 16h BRT → +14h = Sáb 06h → fora → próx 9h útil = Seg 9h BRT
- *   Ter 09h BRT → +14h = Ter 23h → fora → próx 9h útil = Qua 9h BRT
- *
- * @param hours — quantidade mínima de horas (default: 14)
- * @returns delay em milissegundos
+ * Mantido para compatibilidade — o followup de executivos usa calculateFollowupDelayMs.
  */
 export function calculateBusinessHourDelayMs(hours: number): number {
   const now = Date.now()
