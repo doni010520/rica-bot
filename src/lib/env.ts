@@ -52,6 +52,10 @@ const EnvSchema = z.object({
   EXEC_FOLLOWUP_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   EXEC_FOLLOWUP_DELAY_HOURS: intStr(24),
 
+  // ── Resumo diário (digest para a gestora — Maria Helena) ────────────────────
+  DAILY_DIGEST_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  DAILY_DIGEST_CRON: z.string().default('0 20 * * *'),
+
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),
 
