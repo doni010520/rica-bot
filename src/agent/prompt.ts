@@ -72,7 +72,7 @@ function injectVariables(
     .replace(/{{CRM_PRE_CARREGADO}}/g, crmBlock)
     .replace(/{{CRM_EXISTS}}/g, String(crm.exists))
     .replace(/{{CONTACT_ID}}/g, crm.contactId ?? '')
-    .replace(/{{CONTACT_NAME}}/g, crm.contactName ?? displayName)
+    .replace(/{{CONTACT_NAME}}/g, crm.contactName ?? '')
     .replace(/{{COMPANY_ID}}/g, crm.companyId ?? '')
     .replace(/{{COMPANY_NAME}}/g, crm.companyName ?? '')
     .replace(/{{DEAL_ID}}/g, crm.dealId ?? '')
@@ -85,7 +85,7 @@ function buildCrmBlock(crm: CrmContext): string {
 
     CONTATO_EXISTE: ${crm.exists}
     CONTACT_ID: ${crm.contactId ?? ''}
-    CONTACT_NAME: ${crm.contactName ?? ''}
+    CONTACT_NAME: ${crm.contactName || '(desconhecido)'}
     COMPANY_ID: ${crm.companyId ?? ''}
     COMPANY_NAME: ${crm.companyName ?? ''}
     DEAL_ID: ${crm.dealId ?? ''}
@@ -93,6 +93,9 @@ function buildCrmBlock(crm: CrmContext): string {
 
     REGRA DE OURO: No PRIMEIRO turno, Rica usa os dados acima
     e responde ao cliente imediatamente.
+    REGRA DO NOME: Se CONTACT_NAME estiver vazio ou "(desconhecido)", NUNCA
+    use o número de telefone como nome. Cumprimente SEM nome (ex: "Oi! 😊")
+    e, com naturalidade, pergunte como pode chamar a pessoa.
 </crm_pre_carregado>`
 }
 

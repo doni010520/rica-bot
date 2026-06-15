@@ -76,8 +76,23 @@ const RegisterLeadResponseSchema = z.object({
  * @param phone - Telefone normalizado do usuário
  * @param displayName - Nome exibido no WhatsApp (para registro inicial)
  */
+/**
+ * Retorna um nome REAL ou string vazia — NUNCA o telefone.
+ * O WhatsApp às vezes manda o próprio número como "nome"; isso não é nome.
+ */
+export function cleanName(name: string | undefined | null, phone: string): string {
+  const n = (name ?? '').trim()
+  if (!n) return ''
+  const nDigits = n.replace(/\D/g, '')
+  const pDigits = phone.replace(/\D/g, '')
+  // Só dígitos / pontuação de telefone, ou bate com o número → não é nome
+  if (nDigits.length >= 8 && (nDigits === pDigits || /^[\d\s+().-]+$/.test(n))) return ''
+  return n
+}
+
 export async function preFetchCrm(phone: string, displayName: string): Promise<CrmContext> {
   const log = logger.child({ phone: phone.slice(-4), fn: 'preFetchCrm' })
+  const cleanedName = cleanName(displayName, phone)
 
   // ── 1. Busca contato existente ──────────────────────────────────────────────
   try {
@@ -100,7 +115,7 @@ export async function preFetchCrm(phone: string, displayName: string): Promise<C
       return {
         exists: true,
         contactId: res.contact.id,
-        contactName: res.contact.name ?? displayName,
+        contactName: cleanName(res.contact.name, phone) || cleanedName || undefined,
         companyId: res.contact.company_id,
         companyName: res.contact.company_name,
         dealId: primaryDeal?.id,
@@ -125,10 +140,10 @@ export async function preFetchCrm(phone: string, displayName: string): Promise<C
     const raw = await crmRequest('/api/crm/register-lead', {
       method: 'POST',
       body: {
-        contact_name: displayName || phone,
+        contact_name: cleanedName || undefined,
         contact_phone: phone,
         pipeline_name: 'Triagem',
-        deal_title: `Lead WhatsApp - ${displayName || phone}`,
+        deal_title: `Lead WhatsApp - ${cleanedName || phone}`,
         source: 'whatsapp',
         temperature: 'warm',
       },
@@ -143,11 +158,11 @@ export async function preFetchCrm(phone: string, displayName: string): Promise<C
     return {
       exists: false,
       contactId: res.contact?.id,
-      contactName: displayName || phone,
+      contactName: cleanedName || undefined,
       companyId: res.company?.id,
       companyName: res.company?.name,
       dealId: res.deal?.id,
-      openDeals: res.deal?.id ? JSON.stringify([{ id: res.deal.id, title: `Lead WhatsApp - ${displayName}`, status: 'open' }]) : '[]',
+      openDeals: res.deal?.id ? JSON.stringify([{ id: res.deal.id, title: `Lead WhatsApp - ${cleanedName || phone}`, status: 'open' }]) : '[]',
       phone,
     }
   } catch (err) {

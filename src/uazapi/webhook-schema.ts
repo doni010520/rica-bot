@@ -185,8 +185,14 @@ export function parseWebhookPayload(raw: unknown): ParsedMessage | null {
   const fromMe = msg.fromMe ?? false
   const wasSentByApi = msg.wasSentByApi ?? false
 
-  // Nome do contato
-  const displayName = msg.senderName ?? chat?.wa_name ?? chat?.name ?? chat?.lead_name ?? ''
+  // Nome do contato — NUNCA aceitar o próprio número como "nome"
+  // (o WhatsApp às vezes manda o telefone em senderName/wa_name)
+  const rawName = (msg.senderName ?? chat?.wa_name ?? chat?.name ?? chat?.lead_name ?? '').trim()
+  const nameDigits = rawName.replace(/\D/g, '')
+  const looksLikePhone =
+    nameDigits.length >= 8 &&
+    (nameDigits === rawPhone.replace(/\D/g, '') || /^[\d\s+().-]+$/.test(rawName))
+  const displayName = rawName && !looksLikePhone ? rawName : ''
 
   // REVOKE — cliente apagou a mensagem
   const isRevoke = msg.messageType === 'revokeMessage' || msg.type === 'revoke'
