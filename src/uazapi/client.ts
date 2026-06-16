@@ -13,6 +13,7 @@ import { sleep } from '../lib/timezone.js'
 import { formatPhoneForSend } from './normalize-phone.js'
 import { withRetry } from '../lib/retry.js'
 import { logger } from '../observability/logger.js'
+import { logOutbound } from '../observability/outbound-log.js'
 
 // Payload exato que a uazapi aceita (confirmado nos nós "enviar mensagem*" do n8n)
 type UazapiSendPayload = {
@@ -58,7 +59,14 @@ async function postToUazapi(body: UazapiSendPayload): Promise<void> {
 export async function sendWhatsApp(phone: string, text: string): Promise<void> {
   const number = formatPhoneForSend(phone)
   logger.debug({ phone: number.slice(-4), textLen: text.length }, 'sendWhatsApp')
-  await postToUazapi({ number, text, delay: '3000' })
+  let error: unknown
+  try {
+    await postToUazapi({ number, text, delay: '3000' })
+  } catch (e) {
+    error = e
+  }
+  logOutbound({ toPhone: number, content: text, status: error ? 'error' : 'sent', error })
+  if (error) throw error
 }
 
 export async function sendWhatsAppChunked(
@@ -81,12 +89,20 @@ export async function sendWhatsAppChunked(
 
   logger.debug({ phone: number.slice(-4), chunks: chunks.length }, 'Enviando em chunks')
 
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i]
-    if (!chunk) continue
-    await postToUazapi({ number, text: chunk, delay: '3000' })
-    if (i < chunks.length - 1) await sleep(chunkDelayMs)
+  let error: unknown
+  try {
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i]
+      if (!chunk) continue
+      await postToUazapi({ number, text: chunk, delay: '3000' })
+      if (i < chunks.length - 1) await sleep(chunkDelayMs)
+    }
+  } catch (e) {
+    error = e
   }
+  // Grava a mensagem completa (não fragmentada) no log persistente
+  logOutbound({ toPhone: number, content: text, status: error ? 'error' : 'sent', error })
+  if (error) throw error
 }
 
 export async function sendFallbackMessage(phone: string): Promise<void> {
