@@ -51,6 +51,10 @@ export function startFollowupWorker(pool: Pool): void {
     logger.warn('Follow-up worker já está rodando')
     return
   }
+  if (!env.FOLLOWUP_ENABLED) {
+    logger.info('Follow-up de leads DESLIGADO (FOLLOWUP_ENABLED=false) — worker não iniciado')
+    return
+  }
 
   // Cron: minuto 0 de cada hora entre 9-18h, seg-sex
   _cronTask = cron.schedule(
@@ -84,7 +88,9 @@ async function runFollowupCycle(pool: Pool): Promise<void> {
   let candidates: FollowupCandidate[] = []
   try {
     const raw = await crmRequest<unknown>('/api/crm/deals/followup-candidates')
-    candidates = Array.isArray(raw) ? (raw as FollowupCandidate[]) : []
+    // A API retorna { deals: [...] }; aceitar tambem array puro por seguranca
+    const lista = Array.isArray(raw) ? raw : ((raw as { deals?: unknown }).deals ?? [])
+    candidates = Array.isArray(lista) ? (lista as FollowupCandidate[]) : []
     log.info({ count: candidates.length }, 'Candidatos encontrados')
   } catch (err) {
     log.error({ err }, 'Falha ao buscar candidatos — abortando ciclo')

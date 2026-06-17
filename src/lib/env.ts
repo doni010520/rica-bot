@@ -42,6 +42,8 @@ const EnvSchema = z.object({
   ORG_ID: z.string().uuid(),
 
   // ── Follow-up (leads) ───────────────────────────────────────────────────────
+  // Liga/desliga o disparo de follow-up de leads (default OFF — evita disparo em massa sem rollout controlado)
+  FOLLOWUP_ENABLED: z.string().optional().default('false').transform((v) => v === 'true'),
   FOLLOWUP_CRON: z.string().default('0 9-18 * * 1-5'),
   FOLLOWUP_TIMEZONE: z.string().default('America/Sao_Paulo'),
   FOLLOWUP_MAX_ATTEMPTS: intStr(3),
