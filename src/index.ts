@@ -16,6 +16,7 @@ import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
 import { startFollowupWorker } from './followup/worker.js'
 import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup/executive-followup.js'
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
+import { startWeeklyInsightsWorker, stopWeeklyInsightsWorker } from './reports/weekly-insights.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
 import { logBuffer } from './observability/log-buffer.js'
@@ -137,6 +138,7 @@ async function main() {
     startFollowupWorker(getPool())
     startExecutiveFollowupWorker()
     startDailyDigestWorker(getPool())
+    startWeeklyInsightsWorker(getPool())
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
@@ -161,6 +163,7 @@ async function main() {
     try {
       await getMessageBuffer().close()
       stopDailyDigestWorker()
+      stopWeeklyInsightsWorker()
       await closeExecutiveFollowup()
       if (app) await app.close()
       await closePool()

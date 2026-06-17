@@ -56,6 +56,10 @@ const EnvSchema = z.object({
   DAILY_DIGEST_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   DAILY_DIGEST_CRON: z.string().default('0 20 * * *'),
 
+  // ── Análise semanal de gargalos (LLM) para a gestora ────────────────────────
+  INSIGHTS_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  INSIGHTS_CRON: z.string().default('0 8 * * 1'),
+
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),
 
