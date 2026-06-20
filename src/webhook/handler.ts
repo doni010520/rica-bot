@@ -27,6 +27,7 @@ import { clearChatHistory } from '../memory/postgres-chat.js'
 import { isJobCandidate, notifyHR } from '../candidato/detect.js'
 import { buildAllTools } from '../tools/index.js'
 import { runRica } from '../agent/rica.js'
+import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
@@ -135,6 +136,15 @@ export async function handleBufferedMessage(
   const log = webhookLogger(phone)
 
   log.info({ messageCount: msg.messageCount }, 'Processando buffer')
+
+  // 0. COPILOTO: se o telefone for de um membro do time, responde com dados do
+  //    CRM (relatórios, leads) em vez de tratar como lead. Senão, segue normal.
+  const copi = await tryCopiloto(phone, combinedText)
+  if (copi.isTeam) {
+    await sendWhatsAppChunked(phone, copi.answer || 'Não consegui responder agora 😕')
+    log.info('Copiloto respondeu (membro do time)')
+    return
+  }
 
   // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
   const crm = await preFetchCrm(phone, '')
