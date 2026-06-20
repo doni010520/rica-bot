@@ -30,6 +30,8 @@ type RequestOptions = {
   params?: Record<string, string>
   /** Nome da operação para logging */
   operationName?: string
+  /** Timeout em ms (default 10s) — copiloto usa mais, pois roda LLM */
+  timeoutMs?: number
 }
 
 /**
@@ -40,7 +42,7 @@ export async function crmRequest<T = unknown>(
   path: string,
   opts: RequestOptions = {},
 ): Promise<T> {
-  const { method = 'GET', body, params = {}, operationName = path } = opts
+  const { method = 'GET', body, params = {}, operationName = path, timeoutMs = 10_000 } = opts
 
   const url = new URL(`${env.CRM_API_URL}${path}`)
   url.searchParams.set('organization_id', env.ORG_ID)
@@ -54,7 +56,7 @@ export async function crmRequest<T = unknown>(
         method,
         headers: { 'Content-Type': 'application/json' },
         ...(body ? { body: JSON.stringify(body) } : {}),
-        signal: AbortSignal.timeout(10_000),
+        signal: AbortSignal.timeout(timeoutMs),
       })
 
       if (!res.ok) {

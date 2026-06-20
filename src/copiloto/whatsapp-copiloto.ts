@@ -28,6 +28,7 @@ export async function tryCopiloto(phone: string, message: string): Promise<{ isT
       method: 'POST',
       body: { phone, message },
       operationName: 'copiloto_ask',
+      timeoutMs: 30_000,
     })
     return { isTeam: data.is_team === true, answer: data.answer ?? '' }
   } catch (err) {
