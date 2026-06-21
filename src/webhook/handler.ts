@@ -28,6 +28,7 @@ import { isJobCandidate, notifyHR } from '../candidato/detect.js'
 import { buildAllTools } from '../tools/index.js'
 import { runRica } from '../agent/rica.js'
 import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
+import { distributeNewLead } from '../routing/distribute-lead.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
@@ -168,6 +169,18 @@ export async function handleBufferedMessage(
       candidateMessage: combinedText,
     })
     return // Rica não responde para candidatos
+  }
+
+  // 3.5 Distribui TODO lead NOVO (política: todo lead vai pra um consultor).
+  //     Produto identificado na 1a msg → executivo; senão → triagem (Malu) no CRM.
+  //     fire-and-forget: não bloqueia a resposta da Rica ao cliente.
+  if (!crm.exists) {
+    void distributeNewLead({
+      phone,
+      leadName: crm.contactName ?? '',
+      firstMessage: combinedText,
+      dealId: crm.dealId,
+    })
   }
 
   // 4. Executa agent com tools e CrmContext real

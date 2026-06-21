@@ -62,6 +62,13 @@ const EnvSchema = z.object({
   INSIGHTS_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   INSIGHTS_CRON: z.string().default('0 8 * * 1'),
 
+  // ── Distribuição automática de TODO lead novo ───────────────────────────────
+  // true (default): todo lead novo é distribuído (produto detectado → executivo;
+  // sem produto → triagem/Malu). Setar 'false' desliga sem deploy.
+  AUTO_DISTRIBUTE_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  // Email do usuário de triagem (recebe os leads sem produto identificável, no CRM).
+  TRIAGE_EMAIL: z.string().default('malumktsucesso@gmail.com'),
+
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),
 
