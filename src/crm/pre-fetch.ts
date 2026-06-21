@@ -90,9 +90,22 @@ export function cleanName(name: string | undefined | null, phone: string): strin
   return n
 }
 
-export async function preFetchCrm(phone: string, displayName: string): Promise<CrmContext> {
+/**
+ * Detecta o funil já no primeiro contato — leads de campanha que chegam
+ * dizendo o produto (ex: "quero saber da GPS Padaria") nascem no funil certo,
+ * em vez de Triagem/Entrada de Leads. Ambíguos seguem 'Triagem' (a Rica
+ * classifica durante a conversa).
+ */
+function detectPipelineName(firstMessage: string): string {
+  const m = (firstMessage || '').toLowerCase()
+  if (/\bgps\b/.test(m)) return 'GPS'
+  return 'Triagem'
+}
+
+export async function preFetchCrm(phone: string, displayName: string, firstMessage = ''): Promise<CrmContext> {
   const log = logger.child({ phone: phone.slice(-4), fn: 'preFetchCrm' })
   const cleanedName = cleanName(displayName, phone)
+  const pipelineName = detectPipelineName(firstMessage)
 
   // ── 1. Busca contato existente ──────────────────────────────────────────────
   try {
@@ -142,7 +155,7 @@ export async function preFetchCrm(phone: string, displayName: string): Promise<C
       body: {
         contact_name: cleanedName || undefined,
         contact_phone: phone,
-        pipeline_name: 'Triagem',
+        pipeline_name: pipelineName,
         deal_title: `Lead WhatsApp - ${cleanedName || phone}`,
         source: 'whatsapp',
         temperature: 'warm',

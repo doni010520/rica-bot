@@ -147,7 +147,8 @@ export async function handleBufferedMessage(
   }
 
   // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
-  const crm = await preFetchCrm(phone, '')
+  //    Passa a 1a mensagem para detectar o funil (ex: GPS nasce no funil GPS)
+  const crm = await preFetchCrm(phone, '', combinedText)
 
   // 2. Salvar mensagem do cliente (direction=in) — fire-and-forget
   saveMessage({
