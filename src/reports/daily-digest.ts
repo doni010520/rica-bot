@@ -16,6 +16,8 @@
 
 import cron from 'node-cron'
 import type { Pool } from 'pg'
+import { generateText } from 'ai'
+import { openai } from '@ai-sdk/openai'
 import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { sendWhatsApp } from '../uazapi/client.js'
@@ -31,6 +33,7 @@ type DigestData = {
   semDono: Array<{ nome: string; telefone: string; funil: string }>
   cobrancas: number
   backlog: number
+  conversas: { total: number; soAbertura: number; engajou: number }
 }
 
 // ─── coleta de dados ──────────────────────────────────────────────────────────
@@ -41,7 +44,7 @@ const INICIO_DO_DIA =
 async function collectDigest(pool: Pool): Promise<DigestData> {
   const org = env.ORG_ID
 
-  const [novos, distribuidos, semDono, cobrancas, backlog] = await Promise.all([
+  const [novos, distribuidos, semDono, cobrancas, backlog, conversas] = await Promise.all([
     pool.query(
       `SELECT count(*)::int AS n FROM deals
        WHERE organization_id = $1 AND source = 'whatsapp' AND created_at >= ${INICIO_DO_DIA}`,
@@ -75,6 +78,21 @@ async function collectDigest(pool: Pool): Promise<DigestData> {
        WHERE organization_id = $1 AND status = 'open' AND owner_id IS NULL`,
       [org],
     ),
+    pool.query(
+      `WITH novos AS (
+         SELECT c.phone FROM contacts c
+         WHERE c.organization_id = $1 AND c.created_at >= ${INICIO_DO_DIA}
+       ), fm AS (
+         SELECT h.session_id, count(*) FILTER (WHERE h.message->>'type'='human') AS humanas
+         FROM n8n_chat_histories h JOIN novos n ON n.phone = h.session_id
+         GROUP BY h.session_id
+       )
+       SELECT count(*)::int AS total,
+              count(*) FILTER (WHERE humanas <= 1)::int AS so_abertura,
+              count(*) FILTER (WHERE humanas >= 2)::int AS engajou
+       FROM fm`,
+      [org],
+    ),
   ])
 
   const nome = (r: { contact_name?: string | null; contact_phone?: string | null }) =>
@@ -92,12 +110,54 @@ async function collectDigest(pool: Pool): Promise<DigestData> {
     })),
     cobrancas: cobrancas.rows[0]?.n ?? 0,
     backlog: backlog.rows[0]?.n ?? 0,
+    conversas: {
+      total: conversas.rows[0]?.total ?? 0,
+      soAbertura: conversas.rows[0]?.so_abertura ?? 0,
+      engajou: conversas.rows[0]?.engajou ?? 0,
+    },
+  }
+}
+
+// ─── leitura do dia + dicas (IA) ────────────────────────────────────────────────
+
+const TIP_SYSTEM = `Você é uma analista de vendas sênior acompanhando a Rica (assistente de WhatsApp que atende leads de uma consultoria pra padarias).
+Recebe os NÚMEROS DO DIA e escreve, para a gestora:
+1. Uma LEITURA do dia em 1-2 frases (o que os números dizem).
+2. 1 ou 2 DICAS práticas e específicas pra melhorar o atendimento e fazer os leads evoluírem.
+
+Regras: português direto, SEM jargão. Formato WhatsApp (use *negrito* nos títulos, sem tabelas). CURTÍSSIMO (cabe em poucas linhas). Baseie-se SÓ nos dados; não invente números. Se o dia foi fraco em dados, foque na dica mais útil.`
+
+async function generateDailyTip(d: DigestData): Promise<string> {
+  try {
+    const result = await generateText({
+      model: openai(env.OPENAI_MODEL),
+      temperature: 0.5,
+      system: TIP_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content:
+            `Dados de hoje:\n` +
+            `- Leads novos: ${d.leadsNovos}\n` +
+            `- Conversas iniciadas: ${d.conversas.total} (só mandaram "oi" e sumiram: ${d.conversas.soAbertura}; engajaram: ${d.conversas.engajou})\n` +
+            `- Encaminhados a executivos: ${d.distribuidos.length}\n` +
+            `- Sem responsável: ${d.semDono.length}\n` +
+            `- Cobranças enviadas: ${d.cobrancas}\n` +
+            `- Backlog acumulado (sem dono): ${d.backlog}\n\n` +
+            `Escreva a leitura do dia + dicas.`,
+        },
+      ],
+    })
+    return result.text?.trim() ?? ''
+  } catch (err) {
+    logger.warn({ err }, 'Falha ao gerar leitura/dicas do dia (segue sem)')
+    return ''
   }
 }
 
 // ─── montagem da mensagem ───────────────────────────────────────────────────────
 
-function formatDigest(d: DigestData): string {
+function formatDigest(d: DigestData, tip = ''): string {
   const hoje = new Intl.DateTimeFormat('pt-BR', {
     timeZone: 'America/Sao_Paulo',
     day: '2-digit',
@@ -111,6 +171,9 @@ function formatDigest(d: DigestData): string {
   linhas.push(`🎯 Encaminhados: *${d.distribuidos.length}*`)
   linhas.push(`⚠️ Sem responsável: *${d.semDono.length}*`)
   linhas.push(`📞 Cobranças a executivos: *${d.cobrancas}*`)
+  if (d.conversas.total > 0) {
+    linhas.push(`💬 Conversas: *${d.conversas.total}* (${d.conversas.soAbertura} só "oi" · ${d.conversas.engajou} engajaram)`)
+  }
 
   if (d.distribuidos.length > 0) {
     linhas.push('')
@@ -133,6 +196,11 @@ function formatDigest(d: DigestData): string {
 
   linhas.push('')
   linhas.push(`📌 Backlog: *${d.backlog}* leads abertos sem dono`)
+  if (tip) {
+    linhas.push('')
+    linhas.push('━━━━━━━━━━━━')
+    linhas.push(tip)
+  }
   linhas.push('')
   linhas.push('🤖 _Rica — Assistente de Vendas_')
 
@@ -145,7 +213,8 @@ export async function runDailyDigest(pool: Pool): Promise<void> {
   const log = logger.child({ context: 'daily-digest' })
   try {
     const data = await collectDigest(pool)
-    const message = formatDigest(data)
+    const tip = await generateDailyTip(data)
+    const message = formatDigest(data, tip)
     await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, message)
     log.info(
       { leadsNovos: data.leadsNovos, distribuidos: data.distribuidos.length, semDono: data.semDono.length },
