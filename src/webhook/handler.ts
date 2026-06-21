@@ -28,6 +28,7 @@ import { isJobCandidate, notifyHR } from '../candidato/detect.js'
 import { buildAllTools } from '../tools/index.js'
 import { runRica } from '../agent/rica.js'
 import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
+import { tryApproval } from '../copiloto/aprovacoes.js'
 import { distributeNewLead } from '../routing/distribute-lead.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { logger, webhookLogger } from '../observability/logger.js'
@@ -138,8 +139,14 @@ export async function handleBufferedMessage(
 
   log.info({ messageCount: msg.messageCount }, 'Processando buffer')
 
-  // 0. COPILOTO: se o telefone for de um membro do time, responde com dados do
-  //    CRM (relatórios, leads) em vez de tratar como lead. Senão, segue normal.
+  // 0. APROVAÇÃO: se a gestora aprovou uma sugestão da Rica, encaminha pro dev.
+  if (await tryApproval(deps.pool, phone, combinedText)) {
+    log.info('Aprovação da gestora processada')
+    return
+  }
+
+  // 0.1 COPILOTO: se o telefone for de um membro do time, responde com dados do
+  //     CRM (relatórios, leads) em vez de tratar como lead. Senão, segue normal.
   const copi = await tryCopiloto(phone, combinedText)
   if (copi.isTeam) {
     await sendWhatsAppChunked(phone, copi.answer || 'Não consegui responder agora 😕')

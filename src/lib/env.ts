@@ -69,6 +69,9 @@ const EnvSchema = z.object({
   // Email do usuário de triagem (recebe os leads sem produto identificável, no CRM).
   TRIAGE_EMAIL: z.string().default('malumktsucesso@gmail.com'),
 
+  // Telefone (DDI 55) que recebe as aprovações da gestora (dev que aplica no prompt).
+  APPROVAL_FORWARD_PHONE: z.string().default('557193061031'),
+
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),
 
