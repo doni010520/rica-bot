@@ -62,15 +62,19 @@ const EnvSchema = z.object({
   INSIGHTS_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   INSIGHTS_CRON: z.string().default('0 8 * * 1'),
 
-  // ── Distribuição automática de TODO lead novo ───────────────────────────────
-  // true (default): todo lead novo é distribuído (produto detectado → executivo;
-  // sem produto → triagem/Malu). Setar 'false' desliga sem deploy.
-  AUTO_DISTRIBUTE_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   // Email do usuário de triagem (recebe os leads sem produto identificável, no CRM).
   TRIAGE_EMAIL: z.string().default('malumktsucesso@gmail.com'),
 
   // Telefone (DDI 55) que recebe as aprovações da gestora (dev que aplica no prompt).
   APPROVAL_FORWARD_PHONE: z.string().default('557193061031'),
+
+  // ── Transferência de leads NÃO QUALIFICADOS (após a janela de qualificação) ──
+  // O lead não é distribuído na chegada: tem TRANSFER_WINDOW_HOURS pra qualificar/
+  // responder. Quem não respondeu nesse prazo é transferido como "não qualificado".
+  TRANSFER_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  TRANSFER_CRON: z.string().default('0 9-18 * * 1-5'),
+  TRANSFER_WINDOW_HOURS: intStr(24),
+  TRANSFER_MAX_AGE_DAYS: intStr(7),
 
   // ── Dedup ──────────────────────────────────────────────────────────────────
   DEDUP_TTL_SECONDS: intStr(3600),
