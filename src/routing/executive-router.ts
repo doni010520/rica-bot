@@ -79,10 +79,15 @@ export function routeToExecutive(
     reason = 'Eneagrama — Lúcia'
   }
 
-  // ── 3. GPS → André ────────────────────────────────────────────────────────
+  // ── 3. GPS → André (RJ e MG → Patrícia) ───────────────────────────────────
   else if (p.includes('gps')) {
-    executive = EXECUTIVES.ANDRE
-    reason = 'Produto GPS — André'
+    if (state === 'RJ' || state === 'MG') {
+      executive = EXECUTIVES.PATRICIA
+      reason = 'GPS — RJ/MG (Patrícia)'
+    } else {
+      executive = EXECUTIVES.ANDRE
+      reason = 'GPS — demais regiões (André)'
+    }
   }
 
   // ── 4. ALEXY (catch-all nacional) → Alex ─────────────────────────────────

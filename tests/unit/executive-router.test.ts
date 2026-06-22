@@ -24,10 +24,11 @@ describe('routeToExecutive()', () => {
     it('autoconhecimento', () => expect(route('autoconhecimento', '5511999887766').executive.name).toBe('Lúcia Carcerere'))
   })
 
-  describe('GPS → André (independente de região)', () => {
-    it('SP', () => expect(route('GPS Resultado', '5511999887766').executive.name).toBe('André Augusto'))
-    it('PE', () => expect(route('GPS Resultado', '5581999887766').executive.name).toBe('André Augusto'))
-    it('RJ', () => expect(route('GPS Resultado', '5521999887766').executive.name).toBe('André Augusto'))
+  describe('GPS → André (RJ e MG → Patrícia)', () => {
+    it('SP → André', () => expect(route('GPS Resultado', '5511999887766').executive.name).toBe('André Augusto'))
+    it('PE → André', () => expect(route('GPS Resultado', '5581999887766').executive.name).toBe('André Augusto'))
+    it('RJ → Patrícia', () => expect(route('GPS Resultado', '5521999887766').executive.name).toBe('Patrícia Alves'))
+    it('MG → Patrícia', () => expect(route('GPS Resultado', '5531999887766').executive.name).toBe('Patrícia Alves'))
   })
 
   describe('Alexy — catch-all nacional → Alex (sem regional)', () => {

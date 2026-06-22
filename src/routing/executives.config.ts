@@ -40,6 +40,7 @@ export const EXECUTIVES = {
   IRELENE: exec('Irelene Guerreiro', env.EXEC_IRELENE_EMAIL, env.EXEC_IRELENE_PHONE),
   ANA_CLARA: exec('Ana Clara', env.EXEC_ANA_CLARA_EMAIL, env.EXEC_ANA_CLARA_PHONE),
   VANESSA: exec('Vanessa Souza', env.EXEC_VANESSA_EMAIL, env.EXEC_VANESSA_PHONE),
+  PATRICIA: exec('Patrícia Alves', env.EXEC_PATRICIA_EMAIL, env.EXEC_PATRICIA_PHONE),
 } as const
 
 export type ExecutiveKey = keyof typeof EXECUTIVES
@@ -71,4 +72,8 @@ export const EXECUTIVE_ALIASES: Record<string, ExecutiveKey> = {
   'ana clara': 'ANA_CLARA',
   'vanessa': 'VANESSA',
   'vanessa souza': 'VANESSA',
+  'patricia': 'PATRICIA',
+  'patrícia': 'PATRICIA',
+  'patricia alves': 'PATRICIA',
+  'patrícia alves': 'PATRICIA',
 }
