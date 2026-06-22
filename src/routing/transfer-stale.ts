@@ -9,8 +9,11 @@
  * respondeu/qualificou nessa janela é varrido por este worker e transferido
  * mesmo assim — avisando o executivo que é um lead NÃO QUALIFICADO.
  *
- * Roteamento por funil: GPS → executive-router (RJ/MG → Patrícia, resto André).
- * Produto não identificado → triagem (Malu), que distribui pelo CRM.
+ * Roteamento por PRODUTO (mesmo princípio de TODO lead, não só GPS):
+ *   - Lê as mensagens do cliente (n8n_chat_histories) e roda pelo mesmo cérebro
+ *     do notificar_equipe (routeToExecutive) → executivo certo por produto/região.
+ *   - Funil GPS é honrado direto (RJ/MG → Patrícia, resto André).
+ *   - Só quem o roteador NÃO consegue identificar → triagem (Malu) no CRM.
  * Só pega leads recentes (TRANSFER_MAX_AGE_DAYS) — não varre o backlog antigo.
  */
 
@@ -20,12 +23,43 @@ import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { routeToExecutive } from './executive-router.js'
+import { EXECUTIVES } from './executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { isBusinessHour } from '../lib/timezone.js'
 
 let _cronTask: ReturnType<typeof cron.schedule> | null = null
 
 type Cand = { phone: string; nome: string | null; funil: string }
+
+type LcMsg = { type?: string; data?: { content?: string }; content?: string }
+
+/**
+ * Concatena as mensagens DO CLIENTE (type=human) do histórico, pra detectar
+ * o produto. Match tolerante ao 9º dígito (DDD + últimos 8 dígitos).
+ */
+async function loadLeadHumanText(pool: Pool, phone: string): Promise<string> {
+  const digits = phone.replace(/\D/g, '')
+  const ddd = digits.slice(2, 4)
+  const last8 = digits.slice(-8)
+  try {
+    const res = await pool.query<{ message: LcMsg }>(
+      `SELECT message FROM "${env.CHAT_MEMORY_TABLE}"
+       WHERE regexp_replace(session_id, '\\D', '', 'g') LIKE $1
+         AND regexp_replace(session_id, '\\D', '', 'g') LIKE $2
+       ORDER BY id ASC
+       LIMIT 20`,
+      [`%${last8}`, `55${ddd}%`],
+    )
+    return res.rows
+      .map((r) => r.message)
+      .filter((m) => m?.type === 'human')
+      .map((m) => m?.data?.content ?? m?.content ?? '')
+      .join(' ')
+      .slice(0, 2000)
+  } catch {
+    return ''
+  }
+}
 
 async function assignOwner(phone: string, email: string, via: string): Promise<void> {
   await crmRequest('/api/crm/deals/assign-owner-by-phone', {
@@ -71,13 +105,18 @@ export async function runStaleTransfer(pool: Pool): Promise<void> {
     let ok = 0
     for (const c of res.rows) {
       try {
-        if (/gps/i.test(c.funil)) {
-          const r = routeToExecutive('GPS', '', '', c.phone)
-          await sendWhatsApp(r.executive.phoneFormatted, naoQualificadoMsg(r.executive.name, c.nome ?? '', c.phone, 'GPS'))
-          await assignOwner(c.phone, r.executive.email, 'transfer_nao_qualificado')
-        } else {
-          // Produto não identificado → triagem (Malu), distribui pelo CRM (sem spam de WhatsApp)
+        // Funil GPS é honrado direto; senão detecta o produto pela conversa do cliente.
+        const r = /gps/i.test(c.funil)
+          ? routeToExecutive('GPS', '', '', c.phone)
+          : await loadLeadHumanText(pool, c.phone).then((t) => routeToExecutive(t, '', t, c.phone))
+
+        // Maria Helena só aparece no fallback do roteador = produto não identificado → Malu.
+        if (r.executive === EXECUTIVES.MARIA_HELENA) {
           await assignOwner(c.phone, env.TRIAGE_EMAIL, 'transfer_nao_qualificado_triagem')
+        } else {
+          const produto = r.reason.split('—')[0]?.trim() || 'Não informado'
+          await sendWhatsApp(r.executive.phoneFormatted, naoQualificadoMsg(r.executive.name, c.nome ?? '', c.phone, produto))
+          await assignOwner(c.phone, r.executive.email, 'transfer_nao_qualificado')
         }
         ok++
       } catch (err) {
