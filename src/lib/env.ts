@@ -73,7 +73,7 @@ const EnvSchema = z.object({
   // responder. Quem não respondeu nesse prazo é transferido como "não qualificado".
   TRANSFER_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   TRANSFER_CRON: z.string().default('0 9-18 * * 1-5'),
-  TRANSFER_WINDOW_HOURS: intStr(24),
+  TRANSFER_WINDOW_HOURS: intStr(8),
   TRANSFER_MAX_AGE_DAYS: intStr(7),
 
   // ── Dedup ──────────────────────────────────────────────────────────────────
