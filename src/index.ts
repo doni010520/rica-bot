@@ -17,7 +17,6 @@ import { startFollowupWorker } from './followup/worker.js'
 import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup/executive-followup.js'
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
 import { startWeeklyInsightsWorker, stopWeeklyInsightsWorker } from './reports/weekly-insights.js'
-import { broadcastGpsAndreOnce } from './scripts/broadcast-gps-andre.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
 import { logBuffer } from './observability/log-buffer.js'
@@ -140,9 +139,6 @@ async function main() {
     startExecutiveFollowupWorker()
     startDailyDigestWorker(getPool())
     startWeeklyInsightsWorker(getPool())
-
-    // Envio único (one-shot, idempotente) — remover depois de confirmar
-    void broadcastGpsAndreOnce()
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
