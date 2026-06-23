@@ -18,6 +18,7 @@ import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
 import { startWeeklyInsightsWorker, stopWeeklyInsightsWorker } from './reports/weekly-insights.js'
 import { startStaleTransferWorker, stopStaleTransferWorker } from './routing/transfer-stale.js'
+import { runFixMarissolAndre } from './scripts/fix-marissol-andre.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
 import { logBuffer } from './observability/log-buffer.js'
@@ -141,6 +142,9 @@ async function main() {
     startDailyDigestWorker(getPool())
     startWeeklyInsightsWorker(getPool())
     startStaleTransferWorker(getPool())
+
+    // ONE-SHOT (remover após rodar): encaminha Marissol→André + avisa Malu.
+    void runFixMarissolAndre(getPool())
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
