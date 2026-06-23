@@ -77,3 +77,15 @@ export const EXECUTIVE_ALIASES: Record<string, ExecutiveKey> = {
   'patricia alves': 'PATRICIA',
   'patrícia alves': 'PATRICIA',
 }
+
+/**
+ * Resolve um executivo a partir de um nome livre ("André", "patrícia alves",
+ * "Lúcia C."). Tenta o nome completo normalizado e, em fallback, só o 1º nome.
+ * Retorna null se não reconhecer.
+ */
+export function resolveExecutiveByName(name: string): Executive | null {
+  if (!name) return null
+  const norm = name.trim().toLowerCase()
+  const key = EXECUTIVE_ALIASES[norm] ?? EXECUTIVE_ALIASES[norm.split(/\s+/)[0] ?? '']
+  return key ? EXECUTIVES[key] : null
+}

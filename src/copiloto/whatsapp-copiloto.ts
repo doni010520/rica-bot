@@ -15,24 +15,46 @@
 import { crmRequest } from '../lib/crm-client.js'
 import { logger } from '../observability/logger.js'
 
-type AskResponse = { is_team?: boolean; answer?: string }
+/** Ação estruturada que o copiloto pode pedir ao bot pra executar (escrita). */
+export type CopilotoAction = {
+  type: 'encaminhar_lead'
+  telefone: string
+  executivo?: string
+  nome?: string
+  produto?: string
+  empresa?: string
+  solicitante?: string
+}
+
+type AskResponse = { is_team?: boolean; answer?: string; action?: CopilotoAction | null }
+
+export type CopilotoResult = { isTeam: boolean; answer: string; action: CopilotoAction | null }
+
+export type CopilotoHistory = Array<{ role: 'user' | 'assistant'; content: string }>
 
 /**
  * Tenta responder como copiloto. Retorna { isTeam:false } se o telefone não for
  * de um membro do time — aí o chamador segue o fluxo normal de atendimento.
  * Nunca lança: em qualquer erro, cai para atendimento (isTeam:false).
+ *
+ * `action` vem preenchida quando o copiloto pede uma ação de escrita (ex:
+ * encaminhar um lead) — quem executa é o bot (tem o sendWhatsApp e o roteamento).
  */
-export async function tryCopiloto(phone: string, message: string): Promise<{ isTeam: boolean; answer: string }> {
+export async function tryCopiloto(
+  phone: string,
+  message: string,
+  history: CopilotoHistory = [],
+): Promise<CopilotoResult> {
   try {
     const data = await crmRequest<AskResponse>('/api/rica/chat/ask', {
       method: 'POST',
-      body: { phone, message },
+      body: { phone, message, history },
       operationName: 'copiloto_ask',
       timeoutMs: 30_000,
     })
-    return { isTeam: data.is_team === true, answer: data.answer ?? '' }
+    return { isTeam: data.is_team === true, answer: data.answer ?? '', action: data.action ?? null }
   } catch (err) {
     logger.warn({ err, phone: phone.slice(-4) }, 'Copiloto ask falhou — seguindo como atendimento')
-    return { isTeam: false, answer: '' }
+    return { isTeam: false, answer: '', action: null }
   }
 }

@@ -23,11 +23,12 @@ import { saveMessage } from '../crm/save-message.js'
 import { resolveMessageText } from '../media/processors.js'
 import { getMessageBuffer, type BufferedMessage } from '../buffer/message-buffer.js'
 import { detectAdminCommand } from '../commands/admin.js'
-import { clearChatHistory } from '../memory/postgres-chat.js'
+import { clearChatHistory, loadChatHistory, saveChatTurn, historyToMessages } from '../memory/postgres-chat.js'
 import { isJobCandidate, notifyHR } from '../candidato/detect.js'
 import { buildAllTools } from '../tools/index.js'
 import { runRica } from '../agent/rica.js'
 import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
+import { encaminharLeadManual } from '../copiloto/encaminhar.js'
 import { tryApproval } from '../copiloto/aprovacoes.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { logger, webhookLogger } from '../observability/logger.js'
@@ -146,10 +147,22 @@ export async function handleBufferedMessage(
 
   // 0.1 COPILOTO: se o telefone for de um membro do time, responde com dados do
   //     CRM (relatórios, leads) em vez de tratar como lead. Senão, segue normal.
-  const copi = await tryCopiloto(phone, combinedText)
+  //     Memória curta: passa o histórico recente pro copiloto (ex: lead numa msg,
+  //     "envia pro André" na próxima) e persiste o turno depois.
+  const copiHistory = historyToMessages(await loadChatHistory(deps.pool, phone, 12).catch(() => []))
+  const copi = await tryCopiloto(phone, combinedText, copiHistory)
   if (copi.isTeam) {
-    await sendWhatsAppChunked(phone, copi.answer || 'Não consegui responder agora 😕')
-    log.info('Copiloto respondeu (membro do time)')
+    let resposta: string
+    if (copi.action?.type === 'encaminhar_lead') {
+      // Ação de escrita (encaminhar lead): o bot executa (tem o sendWhatsApp e o roteamento).
+      resposta = await encaminharLeadManual(copi.action)
+      log.info({ exec: copi.action.executivo }, 'Copiloto encaminhou lead (ação)')
+    } else {
+      resposta = copi.answer || 'Não consegui responder agora 😕'
+      log.info('Copiloto respondeu (membro do time)')
+    }
+    await sendWhatsAppChunked(phone, resposta)
+    await saveChatTurn(deps.pool, phone, combinedText, resposta).catch(() => {})
     return
   }
 
