@@ -146,7 +146,7 @@ const EnvSchema = z.object({
   EXEC_VANESSA_EMAIL:      z.string().email(),
 
   // Patrícia — recebe GPS de RJ/MG. Opcional com default (configurável no EasyPanel).
-  EXEC_PATRICIA_PHONE:     z.string().regex(/^55\d{10,11}$/).default('5521994937321'),
+  EXEC_PATRICIA_PHONE:     z.string().regex(/^55\d{10,11}$/).default('5521979937174'),
   EXEC_PATRICIA_EMAIL:     z.string().email().default('patricia@sucessonoresultado.com.br'),
 })
 
