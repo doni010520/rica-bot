@@ -18,12 +18,14 @@ import { env } from '../lib/env.js'
 export async function runFixMarissolAndre(pool: Pool): Promise<void> {
   const log = logger.child({ context: 'oneshot-marissol' })
   try {
-    // Idempotência: o lead já foi encaminhado (André já recebeu msg com "Marissol")?
+    // Idempotência: o lead já foi ENCAMINHADO PRA EQUIPE (não confundir com as
+    // respostas de falha "não encontrei Marissol", que são categoria 'lead').
     const done = await pool.query(
-      `SELECT 1 FROM rica_mensagens_enviadas WHERE conteudo ILIKE '%marissol%' LIMIT 1`,
+      `SELECT 1 FROM rica_mensagens_enviadas
+       WHERE conteudo ILIKE '%marissol%' AND categoria = 'equipe' LIMIT 1`,
     )
     if (done.rows.length > 0) {
-      log.info('Marissol já encaminhada anteriormente — skip')
+      log.info('Marissol já encaminhada pra equipe — skip')
       return
     }
 
