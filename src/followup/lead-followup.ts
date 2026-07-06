@@ -171,6 +171,13 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
     /* fail-open: segue */
   }
 
+  // 1.5. Já foi transferido pra um executivo (ou o deal fechou)? Então para —
+  //      quem cuida do lead agora é o executivo, não a Rica.
+  if (!(await leadIsOpenAndUnassigned(pool, phone))) {
+    log.info('lead-followup: lead transferido/fechado — encerrando régua')
+    return
+  }
+
   // 2. Histórico da conversa.
   const history = await loadChatHistory(pool, phone, env.CHAT_MEMORY_WINDOW)
   if (history.length === 0) {
@@ -202,6 +209,35 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
     await scheduleLeadFollowup(phone, attempt + 1)
   } else {
     log.info('lead-followup: última régua enviada — encerrando cobrança deste lead')
+  }
+}
+
+/**
+ * Só faz follow-up se o lead ainda for um deal ABERTO e SEM DONO.
+ * Se já foi transferido pra um executivo (owner_id preenchido) ou o deal
+ * fechou (won/lost → sem deal open sem dono), a régua para.
+ * Match tolerante ao 9º dígito (DDD + últimos 8 dígitos), igual transfer-stale.
+ * Fail-open: erro de DB não mata o follow-up.
+ */
+async function leadIsOpenAndUnassigned(pool: Pool, phone: string): Promise<boolean> {
+  const digits = phone.replace(/\D/g, '')
+  const ddd = digits.slice(2, 4)
+  const last8 = digits.slice(-8)
+  try {
+    const res = await pool.query(
+      `SELECT 1 FROM deals
+       WHERE organization_id = $1
+         AND status = 'open'
+         AND owner_id IS NULL
+         AND regexp_replace(contact_phone, '\\D', '', 'g') LIKE $2
+         AND regexp_replace(contact_phone, '\\D', '', 'g') LIKE $3
+       LIMIT 1`,
+      [env.ORG_ID, `%${last8}`, `55${ddd}%`],
+    )
+    return (res.rowCount ?? 0) > 0
+  } catch (err) {
+    logger.warn({ err, phone: phone.slice(-4) }, 'lead-followup: falha ao checar transferência — seguindo (fail-open)')
+    return true
   }
 }
 
