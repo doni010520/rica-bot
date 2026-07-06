@@ -39,7 +39,8 @@ describe('routeToExecutive()', () => {
 
   describe('Padaria (regional)', () => {
     it('SP → Alex', () => expect(route('padaria artesanal', '5511999887766').executive.name).toBe('Alex Araújo'))
-    it('MG → Alex', () => expect(route('padaria', '5531999887766').executive.name).toBe('Alex Araújo'))
+    it('MG → Lúcia', () => expect(route('padaria', '5531999887766').executive.name).toBe('Lúcia Carcerere'))
+    it('ES → Alex', () => expect(route('padaria', '5527999887766').executive.name).toBe('Alex Araújo'))
     it('PE → Gabriela', () => expect(route('padaria', '5581999887766').executive.name).toBe('Gabriela Câmara'))
     it('PA (norte) → Gabriela', () => expect(route('padaria', '5591999887766').executive.name).toBe('Gabriela Câmara'))
     it('RJ → Lúcia', () => expect(route('padaria', '5521999887766').executive.name).toBe('Lúcia Carcerere'))

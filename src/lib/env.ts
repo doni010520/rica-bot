@@ -78,7 +78,10 @@ const EnvSchema = z.object({
   // ── Transferência de leads NÃO QUALIFICADOS (após a janela de qualificação) ──
   // O lead não é distribuído na chegada: tem TRANSFER_WINDOW_HOURS pra qualificar/
   // responder. Quem não respondeu nesse prazo é transferido como "não qualificado".
-  TRANSFER_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  // Política atual: só lead QUALIFICADO vai pro executivo (via Rica/notificar_equipe).
+  // Lead que não responde fica com o follow-up da Rica — NÃO é transferido.
+  // Por isso este worker nasce DESLIGADO (default false). Reativar = TRANSFER_ENABLED=true.
+  TRANSFER_ENABLED: z.string().optional().default('false').transform((v) => v === 'true'),
   TRANSFER_CRON: z.string().default('0 9-18 * * 1-5'),
   TRANSFER_WINDOW_HOURS: intStr(8),
   TRANSFER_MAX_AGE_DAYS: intStr(7),

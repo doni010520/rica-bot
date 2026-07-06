@@ -98,9 +98,11 @@ export function routeToExecutive(
 
   // ── 5. PADARIA (regional) ─────────────────────────────────────────────────
   else if (isPadaria) {
-    if (subregion === 'sao_paulo' || subregion === 'sudeste_outros') {
+    // MG é 'sudeste_outros' no mapa de DDD, mas padaria de MG vai pra Lúcia
+    // (não pro Alex). Por isso o Sudeste do Alex exclui MG explicitamente.
+    if (subregion === 'sao_paulo' || (subregion === 'sudeste_outros' && state !== 'MG')) {
       executive = EXECUTIVES.ALEX
-      reason = 'Padaria — Sudeste (Alex)'
+      reason = 'Padaria — Sudeste SP/ES (Alex)'
     } else if (region === 'norte' || region === 'nordeste') {
       executive = EXECUTIVES.GABRIELA
       reason = 'Padaria — Norte/Nordeste (Gabriela)'
