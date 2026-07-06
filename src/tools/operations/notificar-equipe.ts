@@ -23,6 +23,7 @@ import { env } from '../../lib/env.js'
 import { logger } from '../../observability/logger.js'
 import { nowFormatted } from '../../lib/timezone.js'
 import { scheduleExecutiveFollowup } from '../../followup/executive-followup.js'
+import { logOutbound } from '../../observability/outbound-log.js'
 
 const NotificarInputSchema = z.object({
   nome: z.string().describe('Nome completo do lead'),
@@ -32,6 +33,12 @@ const NotificarInputSchema = z.object({
   empresa: z.string().optional().describe('Nome da empresa do lead'),
   email: z.string().optional().describe('Email do lead'),
   deal_id: z.string().optional().describe('UUID do deal no CRM'),
+  resumo_diagnostico: z
+    .string()
+    .optional()
+    .describe(
+      'Resumo estruturado do diagnóstico empresarial. Preencher SEMPRE quando produto = "Diagnóstico Empresarial": empresa, cidade/UF, porte, gestor dedicado, desafios, área que mais trava, frequência de indicadores e contexto extra — com os dados reais coletados na conversa.',
+    ),
 })
 
 export function buildNotificarEquipeTool(conversationPhone: string) {
@@ -44,7 +51,7 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
     parameters: NotificarInputSchema,
     execute: async (params) => {
       const log = logger.child({ tool: 'notificar_equipe', phone: conversationPhone.slice(-4) })
-      const { nome, telefone, produto, mensagem, empresa, email, deal_id } = params
+      const { nome, telefone, produto, mensagem, empresa, email, deal_id, resumo_diagnostico } = params
 
       log.info({ produto }, 'Notificar equipe chamado')
 
@@ -69,6 +76,7 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
         leadEmail: email ?? '',
         product: produto,
         message: mensagem,
+        resumoDiagnostico: resumo_diagnostico,
         state: routing.state,
         ddd: routing.ddd,
       })
@@ -156,6 +164,7 @@ async function sendWhatsApp(
   text: string,
   log: { warn: (o: object, m: string) => void; error: (o: object, m: string) => void },
 ): Promise<void> {
+  let ok = false
   try {
     const res = await fetch(`${env.UAZAPI_BASE_URL}/send/text`, {
       method: 'POST',
@@ -163,8 +172,11 @@ async function sendWhatsApp(
       body: JSON.stringify({ number: phone, text, delay: '3000' }),
       signal: AbortSignal.timeout(8_000),
     })
+    ok = res.ok
     if (!res.ok) log.warn({ phone: phone.slice(-4), status: res.status }, 'WhatsApp send non-ok')
   } catch (err) {
     log.error({ err, phone: phone.slice(-4) }, 'Falha ao enviar WhatsApp para equipe')
   }
+  // Log persistente da mensagem enviada à equipe (rica_mensagens_enviadas)
+  logOutbound({ toPhone: phone, content: text, status: ok ? 'sent' : 'error' })
 }

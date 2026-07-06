@@ -156,10 +156,11 @@ export function buildExecutiveMessage(params: {
   leadEmail: string
   product: string
   message: string
+  resumoDiagnostico?: string | undefined
   state: string
   ddd: number | null
 }): string {
-  const { executiveName, leadName, leadPhone, leadCompany, leadEmail, product, message, state, ddd } = params
+  const { executiveName, leadName, leadPhone, leadCompany, leadEmail, product, message, resumoDiagnostico, state, ddd } = params
   const firstName = executiveName.split(' ')[0] ?? executiveName
   const phoneForLink = leadPhone.replace(/^55/, '')
 
@@ -175,6 +176,9 @@ export function buildExecutiveMessage(params: {
     `📍 *Local:* ${state || 'BR'} (DDD ${ddd ?? 'XX'})\n\n` +
     `━━━━━━━━━━━━━━\n💬 *MENSAGEM DO LEAD*\n━━━━━━━━━━━━━━\n` +
     `_"${message || 'Cliente solicitou contato'}"_\n\n` +
+    (resumoDiagnostico
+      ? `━━━━━━━━━━━━━━\n📋 *RESUMO DO DIAGNÓSTICO*\n━━━━━━━━━━━━━━\n${resumoDiagnostico}\n\n`
+      : '') +
     `🔥 *${firstName}, esse lead está fresquinho!*\n` +
     `Quanto mais rápido você fizer contato, maior a chance de fechar! 💪\n\n` +
     `⚡ *Clique para chamar no WhatsApp:*\nwa.me/${phoneForLink}\n\n` +
