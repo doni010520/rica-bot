@@ -31,6 +31,7 @@ import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
 import { encaminharLeadManual } from '../copiloto/encaminhar.js'
 import { tryApproval } from '../copiloto/aprovacoes.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
+import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
 
@@ -83,6 +84,9 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
   }
 
   resetFollowup(phone)
+  // Lead falou → cancela qualquer toque de follow-up pendente (será reagendado
+  // no toque 1 depois que a Rica responder).
+  void cancelLeadFollowup(phone)
 
   const lidiaResult = await checkLidiaStatus(deps.pool, phone)
   if (!lidiaResult.exists) {
@@ -212,6 +216,9 @@ export async function handleBufferedMessage(
   // 6. Envia em chunks com delay
   await sendWhatsAppChunked(phone, result.text)
   log.info({ chunks: result.text.split('\n\n').filter(Boolean).length }, 'Resposta enviada')
+
+  // 7. Agenda follow-up inteligente (toque 1). Cancelado se o lead responder.
+  void scheduleLeadFollowup(phone, 1)
 }
 
 // ─── fromMe handler ───────────────────────────────────────────────────────────

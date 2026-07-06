@@ -54,6 +54,13 @@ const EnvSchema = z.object({
   EXEC_FOLLOWUP_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   EXEC_FOLLOWUP_DELAY_HOURS: intStr(24),
 
+  // ── Follow-up de leads (agendador próprio do rica-bot — BullMQ) ─────────────
+  // Substitui o worker por cron (FOLLOWUP_*). Só agenda pra quem interage a
+  // partir de agora (backlog antigo nunca entra); cancela quando o lead responde.
+  LEAD_FOLLOWUP_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
+  // Régua de toques em horas (ajustada a horário comercial). Ex: "2,24,72".
+  LEAD_FOLLOWUP_DELAYS_HOURS: z.string().default('2,24,72'),
+
   // ── Resumo diário (digest para a gestora — Maria Helena) ────────────────────
   DAILY_DIGEST_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   DAILY_DIGEST_CRON: z.string().default('0 20 * * *'),

@@ -15,6 +15,7 @@ import { getMessageBuffer } from './buffer/message-buffer.js'
 import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
 import { startFollowupWorker } from './followup/worker.js'
 import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup/executive-followup.js'
+import { startLeadFollowupWorker, closeLeadFollowup } from './followup/lead-followup.js'
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
 import { startWeeklyInsightsWorker, stopWeeklyInsightsWorker } from './reports/weekly-insights.js'
 import { startStaleTransferWorker, stopStaleTransferWorker } from './routing/transfer-stale.js'
@@ -138,6 +139,7 @@ async function main() {
     // Inicia workers
     startFollowupWorker(getPool())
     startExecutiveFollowupWorker()
+    startLeadFollowupWorker(getPool())
     startDailyDigestWorker(getPool())
     startWeeklyInsightsWorker(getPool())
     startStaleTransferWorker(getPool())
@@ -168,6 +170,7 @@ async function main() {
       stopWeeklyInsightsWorker()
       stopStaleTransferWorker()
       await closeExecutiveFollowup()
+      await closeLeadFollowup()
       if (app) await app.close()
       await closePool()
       await closeMetrics()
