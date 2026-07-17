@@ -155,6 +155,13 @@ const EnvSchema = z.object({
   EXEC_VANESSA_PHONE:      z.string().regex(/^55\d{10,11}$/),
   EXEC_VANESSA_EMAIL:      z.string().email(),
 
+  // ── Time que NÃO é executivo (triagem/gestão/dev) ────────────────────────
+  // Telefones com DDI 55, separados por vírgula (ex: Malu, Adonias, Renato).
+  // Rede de segurança: quem está aqui NUNCA é tratado como lead — nem se a API
+  // do CRM cair e o copiloto deixar de reconhecer o time (is_team:false).
+  // Sem valor, só os executivos (EXEC_*_PHONE) ficam protegidos.
+  TEAM_PHONES: z.string().optional().default(''),
+
   // Patrícia — recebe GPS de RJ/MG. Opcional com default (configurável no EasyPanel).
   EXEC_PATRICIA_PHONE:     z.string().regex(/^55\d{10,11}$/).default('5521979937174'),
   EXEC_PATRICIA_EMAIL:     z.string().email().default('patricia@sucessonoresultado.com.br'),

@@ -100,22 +100,26 @@ function phoneKey(phone: string): string {
   return `${ddd}${d.slice(-8)}`
 }
 
-const EXEC_PHONE_KEYS = new Set(
-  Object.values(EXECUTIVES)
-    .map((e) => phoneKey(e.phoneFormatted))
+/** Executivos (EXEC_*_PHONE) + time que não é executivo (TEAM_PHONES: Malu, Adonias...). */
+const TEAM_PHONE_KEYS = new Set(
+  [
+    ...Object.values(EXECUTIVES).map((e) => e.phoneFormatted),
+    ...env.TEAM_PHONES.split(',').map((s) => s.trim()),
+  ]
+    .map(phoneKey)
     .filter(Boolean),
 )
 
 /**
- * O telefone é de um executivo do time?
+ * O telefone é de alguém do TIME (executivo ou triagem/gestão)?
  *
  * REDE DE SEGURANÇA: o copiloto só reconhece o time se o CRM tiver o número em
- * `users.whatsapp` — e vários executivos não estão cadastrados lá. Sem esta
- * checagem, o executivo cai no fluxo de LEAD: vira deal no pipeline, a Rica
- * tenta vender pra ele e o follow-up passa a cobrá-lo. Aqui o rica-bot usa a
- * PRÓPRIA config (EXEC_*_PHONE) e não depende da allowlist do CRM estar certa.
+ * `users.whatsapp` — e vários não estão cadastrados lá. Sem esta checagem, a
+ * pessoa do time cai no fluxo de LEAD: vira deal no pipeline, a Rica tenta
+ * vender pra ela e o follow-up passa a cobrá-la. Aqui o rica-bot usa a PRÓPRIA
+ * config e não depende da allowlist do CRM (nem do CRM estar no ar).
  */
-export function isKnownExecutive(phone: string): boolean {
+export function isTeamPhone(phone: string): boolean {
   const k = phoneKey(phone)
-  return k !== '' && EXEC_PHONE_KEYS.has(k)
+  return k !== '' && TEAM_PHONE_KEYS.has(k)
 }

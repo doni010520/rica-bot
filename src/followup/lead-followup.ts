@@ -29,7 +29,7 @@ import { env } from '../lib/env.js'
 import { logger, followupLogger } from '../observability/logger.js'
 import { loadChatHistory, historyToMessages } from '../memory/postgres-chat.js'
 import { checkLidiaStatus } from '../lidia/status.js'
-import { isKnownExecutive } from '../routing/executives.config.js'
+import { isTeamPhone } from '../routing/executives.config.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { calculateBusinessHourDelayMs } from './executive-followup.js'
 
@@ -163,8 +163,8 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
 
   // 0. Executivo do time NUNCA recebe follow-up de lead (a Rica cobraria o
   //    próprio time). Vale também pra toques agendados antes desta proteção.
-  if (isKnownExecutive(phone)) {
-    log.warn({ phone: phone.slice(-4) }, '⚠️ lead-followup: telefone é de EXECUTIVO — abortando régua')
+  if (isTeamPhone(phone)) {
+    log.warn({ phone: phone.slice(-4) }, '⚠️ lead-followup: telefone é do TIME — abortando régua')
     return
   }
 

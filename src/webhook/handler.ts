@@ -32,7 +32,7 @@ import { encaminharLeadManual } from '../copiloto/encaminhar.js'
 import { tryApproval } from '../copiloto/aprovacoes.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
-import { isKnownExecutive } from '../routing/executives.config.js'
+import { isTeamPhone } from '../routing/executives.config.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
 
@@ -91,8 +91,8 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
 
   const lidiaResult = await checkLidiaStatus(deps.pool, phone)
   if (!lidiaResult.exists) {
-    // Executivo do time NUNCA vira lead na LeadsAlexy (ver isKnownExecutive).
-    if (!isKnownExecutive(phone)) {
+    // Time NUNCA vira lead na LeadsAlexy (ver isTeamPhone).
+    if (!isTeamPhone(phone)) {
       await createLeadEntry(deps.pool, { phone, name: parsed.displayName })
     }
   } else if (lidiaResult.lidia === 'OFF') {
@@ -174,15 +174,25 @@ export async function handleBufferedMessage(
     return
   }
 
-  // 0.2 REDE DE SEGURANÇA: é um executivo do time que o copiloto não reconheceu?
-  //     (acontece quando o CRM não tem o número em users.whatsapp). NUNCA tratar
-  //     como lead: não cria deal, não tenta vender e não agenda follow-up —
-  //     a Rica ficaria cobrando o próprio time. Loga alto pra cadastrarmos no CRM.
-  if (isKnownExecutive(phone)) {
-    log.warn(
-      { phone: phone.slice(-4) },
-      '⚠️ Executivo do time não reconhecido pelo copiloto (falta users.whatsapp no CRM) — ignorando mensagem, NÃO tratado como lead',
-    )
+  // 0.2 REDE DE SEGURANÇA: chegou aqui = o copiloto NÃO atendeu. Se o telefone é
+  //     do time, NUNCA tratar como lead (não cria deal, não vende, não agenda
+  //     follow-up — a Rica ficaria cobrando o próprio time).
+  if (isTeamPhone(phone)) {
+    if (copi.failed) {
+      // O CRM caiu: não sabemos nada. Avisar é melhor que silenciar — a pessoa
+      // (ex: Malu encaminhando um lead) precisa saber que deve tentar de novo.
+      log.error({ phone: phone.slice(-4) }, '⚠️ Copiloto indisponível para membro do time — avisando, NÃO tratado como lead')
+      await sendWhatsApp(
+        phone,
+        'Oi! Tive um problema aqui no sistema e não consegui processar sua mensagem agora 😕 Pode mandar de novo daqui a pouquinho?',
+      ).catch(() => {})
+    } else {
+      // O CRM afirmou "não é time" → falta cadastrar o whatsapp em users.whatsapp.
+      log.warn(
+        { phone: phone.slice(-4) },
+        '⚠️ Membro do time não reconhecido pelo copiloto (falta users.whatsapp no CRM) — ignorando, NÃO tratado como lead',
+      )
+    }
     return
   }
 

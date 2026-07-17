@@ -28,7 +28,17 @@ export type CopilotoAction = {
 
 type AskResponse = { is_team?: boolean; answer?: string; action?: CopilotoAction | null }
 
-export type CopilotoResult = { isTeam: boolean; answer: string; action: CopilotoAction | null }
+export type CopilotoResult = {
+  isTeam: boolean
+  answer: string
+  action: CopilotoAction | null
+  /**
+   * true = a chamada ao CRM FALHOU (timeout/erro), então NÃO sabemos se é time.
+   * Diferente de isTeam:false, que é o CRM afirmando "não é time".
+   * Sem isso, uma queda do CRM faria um membro do time virar lead.
+   */
+  failed: boolean
+}
 
 export type CopilotoHistory = Array<{ role: 'user' | 'assistant'; content: string }>
 
@@ -52,9 +62,9 @@ export async function tryCopiloto(
       operationName: 'copiloto_ask',
       timeoutMs: 30_000,
     })
-    return { isTeam: data.is_team === true, answer: data.answer ?? '', action: data.action ?? null }
+    return { isTeam: data.is_team === true, answer: data.answer ?? '', action: data.action ?? null, failed: false }
   } catch (err) {
     logger.warn({ err, phone: phone.slice(-4) }, 'Copiloto ask falhou — seguindo como atendimento')
-    return { isTeam: false, answer: '', action: null }
+    return { isTeam: false, answer: '', action: null, failed: true }
   }
 }
