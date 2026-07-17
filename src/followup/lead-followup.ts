@@ -29,6 +29,7 @@ import { env } from '../lib/env.js'
 import { logger, followupLogger } from '../observability/logger.js'
 import { loadChatHistory, historyToMessages } from '../memory/postgres-chat.js'
 import { checkLidiaStatus } from '../lidia/status.js'
+import { isKnownExecutive } from '../routing/executives.config.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { calculateBusinessHourDelayMs } from './executive-followup.js'
 
@@ -159,6 +160,13 @@ export async function closeLeadFollowup(): Promise<void> {
 async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<void> {
   const { phone, attempt } = data
   const log = followupLogger(phone.slice(-4))
+
+  // 0. Executivo do time NUNCA recebe follow-up de lead (a Rica cobraria o
+  //    próprio time). Vale também pra toques agendados antes desta proteção.
+  if (isKnownExecutive(phone)) {
+    log.warn({ phone: phone.slice(-4) }, '⚠️ lead-followup: telefone é de EXECUTIVO — abortando régua')
+    return
+  }
 
   // 1. Takeover: se um humano assumiu (Lidia OFF), não cobra.
   try {

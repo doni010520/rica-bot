@@ -89,3 +89,33 @@ export function resolveExecutiveByName(name: string): Executive | null {
   const key = EXECUTIVE_ALIASES[norm] ?? EXECUTIVE_ALIASES[norm.split(/\s+/)[0] ?? '']
   return key ? EXECUTIVES[key] : null
 }
+
+// ─── rede de segurança: executivo NUNCA é lead ───────────────────────────────
+
+/** Chave tolerante ao 9º dígito: DDD + últimos 8 dígitos. */
+function phoneKey(phone: string): string {
+  const d = (phone ?? '').replace(/\D/g, '')
+  if (d.length < 10) return ''
+  const ddd = d.length >= 12 ? d.slice(2, 4) : d.slice(0, 2)
+  return `${ddd}${d.slice(-8)}`
+}
+
+const EXEC_PHONE_KEYS = new Set(
+  Object.values(EXECUTIVES)
+    .map((e) => phoneKey(e.phoneFormatted))
+    .filter(Boolean),
+)
+
+/**
+ * O telefone é de um executivo do time?
+ *
+ * REDE DE SEGURANÇA: o copiloto só reconhece o time se o CRM tiver o número em
+ * `users.whatsapp` — e vários executivos não estão cadastrados lá. Sem esta
+ * checagem, o executivo cai no fluxo de LEAD: vira deal no pipeline, a Rica
+ * tenta vender pra ele e o follow-up passa a cobrá-lo. Aqui o rica-bot usa a
+ * PRÓPRIA config (EXEC_*_PHONE) e não depende da allowlist do CRM estar certa.
+ */
+export function isKnownExecutive(phone: string): boolean {
+  const k = phoneKey(phone)
+  return k !== '' && EXEC_PHONE_KEYS.has(k)
+}

@@ -32,6 +32,7 @@ import { encaminharLeadManual } from '../copiloto/encaminhar.js'
 import { tryApproval } from '../copiloto/aprovacoes.js'
 import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
+import { isKnownExecutive } from '../routing/executives.config.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
 
@@ -90,7 +91,10 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
 
   const lidiaResult = await checkLidiaStatus(deps.pool, phone)
   if (!lidiaResult.exists) {
-    await createLeadEntry(deps.pool, { phone, name: parsed.displayName })
+    // Executivo do time NUNCA vira lead na LeadsAlexy (ver isKnownExecutive).
+    if (!isKnownExecutive(phone)) {
+      await createLeadEntry(deps.pool, { phone, name: parsed.displayName })
+    }
   } else if (lidiaResult.lidia === 'OFF') {
     log.info('lidia_off — skip')
     return
@@ -167,6 +171,18 @@ export async function handleBufferedMessage(
     }
     await sendWhatsAppChunked(phone, resposta)
     await saveChatTurn(deps.pool, phone, combinedText, resposta).catch(() => {})
+    return
+  }
+
+  // 0.2 REDE DE SEGURANÇA: é um executivo do time que o copiloto não reconheceu?
+  //     (acontece quando o CRM não tem o número em users.whatsapp). NUNCA tratar
+  //     como lead: não cria deal, não tenta vender e não agenda follow-up —
+  //     a Rica ficaria cobrando o próprio time. Loga alto pra cadastrarmos no CRM.
+  if (isKnownExecutive(phone)) {
+    log.warn(
+      { phone: phone.slice(-4) },
+      '⚠️ Executivo do time não reconhecido pelo copiloto (falta users.whatsapp no CRM) — ignorando mensagem, NÃO tratado como lead',
+    )
     return
   }
 
