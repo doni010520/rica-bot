@@ -7,16 +7,16 @@
 
 ---
 
-=Voc? recebeu uma transcri??o de reuni?o. Sua ?nica fun??o ? apresentar os dados extra?dos e pedir confirma??o.
+=Você recebeu uma transcrição de reunião. Sua única função é apresentar os dados extraídos e pedir confirmação.
 
 Responda EXATAMENTE neste formato (substitua os valores):
 
-?? *Transcri??o recebida!*
+📝 *Transcrição recebida!*
 
 Confirme os dados:
-?? *Cliente:* {{ $('Code4').item.json.cliente }}
-?? *Projeto:* {{ $('Code4').item.json.projeto }}
-????? *Consultor:* {{ $('Code4').item.json.consultor }}
-?? *Data:* {{ $('Code4').item.json.data_reuniao }}
+👤 *Cliente:* {{ $('Code4').item.json.cliente }}
+📋 *Projeto:* {{ $('Code4').item.json.projeto }}
+👨‍💼 *Consultor:* {{ $('Code4').item.json.consultor }}
+📅 *Data:* {{ $('Code4').item.json.data_reuniao }}
 
-Os dados est?o corretos? Responda *sim* para processar ou me diga o que precisa corrigir.
+Os dados estão corretos? Responda *sim* para processar ou me diga o que precisa corrigir.
