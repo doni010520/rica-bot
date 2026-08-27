@@ -78,6 +78,11 @@ Todas as variáveis estão documentadas em `.env.example`. As obrigatórias:
 
 O processo **falha na inicialização** se qualquer variável obrigatória estiver ausente — fail-fast intencional.
 
+Opcional relevante: `CRM_SERVICE_TOKEN`. Quando preenchida, o bot envia o header `x-service-token` em
+**todas** as chamadas ao CRM (o CRM só aceita o acesso por `organization_id` se o token bater com o
+`SERVICE_API_KEY` dele). Enquanto a env não estiver configurada dos dois lados, o comportamento antigo
+continua valendo — a mudança é retrocompatível. O header nunca é enviado ao uazapi nem à OpenAI.
+
 ---
 
 ## Comandos
@@ -134,7 +139,7 @@ rica-bot/
 │   ├── lidia/                      # Sprint 1 — ON/OFF status
 │   ├── candidato/                  # Sprint 2 — detect + notify Vanessa
 │   ├── memory/                     # Sprint 1 — Postgres Chat Memory
-│   └── followup/                   # Sprint 4 — worker cron
+│   └── followup/                   # Sprint 4 — follow-up de leads e executivos (BullMQ)
 ├── tests/
 │   ├── unit/                       # Testes unitários (sem I/O)
 │   ├── integration/                # Testes com HTTP/DB
@@ -158,7 +163,7 @@ rica-bot/
 | Webhook + Agent | Texto, áudio, imagem, PDF, buffer Redis | ✅ |
 | CRM tools | 14 tools + pre-fetch + save-message | ✅ |
 | Notificação | notificar_equipe + designar_lead + dedup + roteamento | ✅ |
-| Follow-up | Worker cron + sub-agente | ✅ |
+| Follow-up | Agendador BullMQ por lead + sub-agente | ✅ |
 | RAG | buscar_documentos via match_documents (Supabase pgvector) | ✅ |
 | Cutover | Migração direta (sem canary) — trocar webhook do uazapi | A fazer |
 | Disparos | Disparos em massa (futuro) | A fazer |
@@ -170,6 +175,29 @@ rica-bot/
 ### Por que BullMQ para o buffer de mensagens?
 
 O n8n usa `Redis RPUSH → Wait 10s → Redis GET` para agregar mensagens fragmentadas. Em código, o equivalente com `setTimeout` funcionaria, mas não sobreviveria a um restart do processo. BullMQ com delayed jobs garante que a mensagem seja processada mesmo se o pod reiniciar durante a janela de 10s.
+
+### Por que só um mecanismo de follow-up de lead
+
+Existiam dois: um worker por cron (`src/followup/worker.ts`) que varria
+`GET /api/crm/deals/followup-candidates`, e o agendador próprio em BullMQ
+(`src/followup/lead-followup.ts`). O worker por cron foi **removido**. O que roda hoje:
+
+- A cada resposta da Rica a um lead, agenda-se o toque 1 (`scheduleLeadFollowup`).
+- Régua configurável em `LEAD_FOLLOWUP_DELAYS_HOURS` (default `2,24,72` horas), sempre
+  ajustada para cair em horário comercial.
+- Qualquer mensagem do lead cancela os toques pendentes (`cancelLeadFollowup`); a próxima
+  resposta da Rica reinicia a régua no toque 1.
+- A régua para se o deal ganhar dono (foi transferido pra um executivo), se o deal fechar,
+  ou se um humano assumir a conversa (Lidia OFF).
+- Ao esgotar a régua sem resposta, o deal é fechado como perdido via
+  `PATCH /api/crm/deals/:id/close-no-response` (`lost_reason = sem_resposta_followup`).
+  Isso substitui o `POST /api/crm/deals/close-inactive` em massa que o worker legado
+  disparava a cada ciclo — aquele endpoint dependia do contador `followup_count` do CRM,
+  que só o worker removido alimentava.
+- Liga/desliga em `LEAD_FOLLOWUP_ENABLED` (default `true`).
+
+Só entram na régua leads que interagem a partir de agora — o backlog parado nunca é varrido,
+então não existe risco de disparo em massa.
 
 ### Por que Zod em todas as tools?
 
@@ -192,7 +220,7 @@ Força diferenciação entre `campo: string | undefined` e `campo?: string`. No 
 | agente (principal) | `56f4gE0UKHEXMUfa` | `src/webhook/handler.ts` + `src/agent/rica.ts` |
 | notificar_equipe | `FdCc5kuCsjavaPXx` | `src/tools/operations/notificar-equipe.ts` |
 | designar_lead | `IvDqiFrUig0OHBbw` | `src/tools/operations/designar-lead.ts` |
-| Rica - Follow-up Automatico | `6wbh3Fhzm8KbCkVe` | `src/followup/worker.ts` |
+| Rica - Follow-up Automatico | `6wbh3Fhzm8KbCkVe` | `src/followup/lead-followup.ts` (reimplementado — ver "Follow-up de leads") |
 | 14 CRM tools | vários | `src/tools/crm/*.ts` |
 
 ---

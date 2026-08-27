@@ -13,7 +13,6 @@ import { logger } from './observability/logger.js'
 import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
 import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
-import { startFollowupWorker } from './followup/worker.js'
 import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup/executive-followup.js'
 import { startLeadFollowupWorker, closeLeadFollowup } from './followup/lead-followup.js'
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
@@ -137,7 +136,6 @@ async function main() {
 
   try {
     // Inicia workers
-    startFollowupWorker(getPool())
     startExecutiveFollowupWorker()
     startLeadFollowupWorker(getPool())
     startDailyDigestWorker(getPool())
