@@ -45,17 +45,6 @@ export const EXECUTIVES = {
 
 export type ExecutiveKey = keyof typeof EXECUTIVES
 
-/**
- * Adonias — destino de MKT/Planejamento/Mentoria desde 27/08/2026.
- *
- * Fica FORA de EXECUTIVES porque depende de env opcional: null quando as vars
- * nao estao configuradas. Quem consome deve usar `?? EXECUTIVES.MARIA_HELENA`.
- */
-export const ADONIAS: Executive | null =
-  env.EXEC_ADONIAS_PHONE && env.EXEC_ADONIAS_EMAIL
-    ? exec('Adonias', env.EXEC_ADONIAS_EMAIL, env.EXEC_ADONIAS_PHONE)
-    : null
-
 export const EXECUTIVE_ALIASES: Record<string, ExecutiveKey> = {
   'helen': 'HELEN',
   'helen monte': 'HELEN',
@@ -119,7 +108,6 @@ function phoneKey(phone: string): string {
 const TEAM_PHONE_KEYS = new Set(
   [
     ...Object.values(EXECUTIVES).map((e) => e.phoneFormatted),
-    ...(ADONIAS ? [ADONIAS.phoneFormatted] : []),
     ...env.TEAM_PHONES.split(',').map((s) => s.trim()),
     env.APPROVAL_FORWARD_PHONE,
   ]

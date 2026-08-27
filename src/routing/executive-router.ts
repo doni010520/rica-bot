@@ -9,12 +9,12 @@
  * - Alexy é catch-all nacional → Alex (não segue regional como padaria)
  * - Treinamentos/PDL → Vanessa (prioridade 1)
  * - Eneagrama/autoconhecimento → Lúcia (prioridade 2)
- * - MKT/Planejamento/Mentoria → Adonias (era Helen Monte até 27/08/2026)
+ * - MKT/Planejamento/Mentoria → Maria Helena (era Helen Monte até 27/08/2026)
  * - Cafeteria → Gabriela Câmara (era Ana Clara até 27/08/2026)
  * - Fallback → 100% Maria Helena (sem hash 50/50 — era bug da versão anterior)
  */
 
-import { ADONIAS, EXECUTIVES, type Executive } from './executives.config.js'
+import { EXECUTIVES, type Executive } from './executives.config.js'
 import { mapDDDToRegion } from './region-mapper.js'
 
 export type RoutingResult = {
@@ -138,11 +138,11 @@ export function routeToExecutive(
     p.includes('planejamento comercial') ||
     p.includes('mentoria')
   ) {
-    // Era Helen Monte ate 27/08/2026; passou a vir para o Adonias.
-    executive = ADONIAS ?? EXECUTIVES.MARIA_HELENA
-    reason = ADONIAS
-      ? 'MKT/Planejamento/Mentoria — Adonias'
-      : 'MKT/Planejamento/Mentoria — EXEC_ADONIAS_* nao configurada, caiu na gestora'
+    // Era Helen Monte ate 27/08/2026; a pedido dela, passou a vir para a
+    // Maria Helena. Mesmo destino do fallback, mas a regra fica explicita para
+    // o `reason` do log dizer que veio por MKT, e nao por falta de match.
+    executive = EXECUTIVES.MARIA_HELENA
+    reason = 'MKT/Planejamento/Mentoria — Maria Helena'
   }
 
   // ── 9. Fallback → Maria Helena (100%, sem hash) ───────────────────────────

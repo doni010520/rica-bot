@@ -9,7 +9,6 @@ import Fastify from 'fastify'
 import sensible from '@fastify/sensible'
 import cors from '@fastify/cors'
 import { env } from './lib/env.js'
-import { ADONIAS } from './routing/executives.config.js'
 import { logger } from './observability/logger.js'
 import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
@@ -151,21 +150,10 @@ async function main() {
     app = await buildApp()
     await app.listen({ port: env.PORT, host: '0.0.0.0' })
 
-    // Roteamento de MKT/Planejamento/Mentoria depende de env OPCIONAL. Sem ela o
-    // bot sobe normalmente, mas esses leads caem na gestora -- e isso precisa
-    // aparecer no boot, senao vira desvio silencioso de lead.
-    if (!ADONIAS) {
-      logger.error(
-        { esperado: 'EXEC_ADONIAS_PHONE + EXEC_ADONIAS_EMAIL' },
-        '⚠️ Adonias nao configurado: leads de MKT/Planejamento/Mentoria vao para a gestora (Maria Helena)',
-      )
-    }
-
     logger.info({
       port: env.PORT,
       env: env.NODE_ENV,
       webhook: env.UAZAPI_WEBHOOK_PATH,
-      roteamentoMkt: ADONIAS ? ADONIAS.name : 'Maria Helena (fallback)',
     }, '🚀 rica-bot iniciado')
   } catch (err) {
     logger.fatal({ error: err }, 'Falha na inicialização')

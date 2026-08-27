@@ -64,13 +64,13 @@ describe('routeToExecutive()', () => {
       expect(route('cafeteria gourmet', '5511999887766').executive.name).not.toBe('Ana Clara'))
   })
 
-  // Helen Monte saiu do direcionamento em 27/08/2026 -- passou para o Adonias.
-  describe('MKT/Planejamento/Mentoria → Adonias', () => {
-    it('marketing', () => expect(route('marketing digital', '5511999887766').executive.name).toBe('Adonias'))
-    it('mkt', () => expect(route('mkt', '5511999887766').executive.name).toBe('Adonias'))
-    it('mentoria', () => expect(route('mentoria empresarial', '5511999887766').executive.name).toBe('Adonias'))
-    it('planejamento estratégico', () => expect(route('planejamento estratégico', '5511999887766').executive.name).toBe('Adonias'))
-    it('planejamento comercial', () => expect(route('planejamento comercial', '5511999887766').executive.name).toBe('Adonias'))
+  // Helen Monte saiu do direcionamento em 27/08/2026 -- passou para a Maria Helena.
+  describe('MKT/Planejamento/Mentoria → Maria Helena', () => {
+    it('marketing', () => expect(route('marketing digital', '5511999887766').executive.name).toBe('Maria Helena'))
+    it('mkt', () => expect(route('mkt', '5511999887766').executive.name).toBe('Maria Helena'))
+    it('mentoria', () => expect(route('mentoria empresarial', '5511999887766').executive.name).toBe('Maria Helena'))
+    it('planejamento estratégico', () => expect(route('planejamento estratégico', '5511999887766').executive.name).toBe('Maria Helena'))
+    it('planejamento comercial', () => expect(route('planejamento comercial', '5511999887766').executive.name).toBe('Maria Helena'))
     it('nenhum produto cai mais na Helen', () => {
       for (const p of ['marketing digital', 'mkt', 'mentoria empresarial', 'planejamento estratégico']) {
         expect(route(p, '5511999887766').executive.name).not.toBe('Helen Monte')

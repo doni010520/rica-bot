@@ -158,12 +158,6 @@ const EnvSchema = z.object({
   EXEC_ANA_CLARA_EMAIL:    z.string().email(),
   EXEC_VANESSA_PHONE:      z.string().regex(/^55\d{10,11}$/),
   EXEC_VANESSA_EMAIL:      z.string().email(),
-  // Destino de MKT/Planejamento/Mentoria desde 27/08/2026 (saiu da Helen Monte).
-  // OPCIONAL de proposito: se faltar no EasyPanel, o bot PRECISA subir mesmo
-  // assim -- cai no fallback (Maria Helena) e avisa no boot. Uma var obrigatoria
-  // aqui derrubaria o atendimento inteiro por causa de um roteamento.
-  EXEC_ADONIAS_PHONE:      z.string().regex(/^55\d{10,11}$/).optional(),
-  EXEC_ADONIAS_EMAIL:      z.string().email().optional(),
 
   // ── Time que NÃO é executivo (triagem/gestão/dev) ────────────────────────
   // Telefones com DDI 55, separados por vírgula (ex: Malu, Adonias, Renato).

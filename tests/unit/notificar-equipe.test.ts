@@ -104,8 +104,8 @@ describe('notificar_equipe tool', () => {
       { produto: 'Treinamento de líderes', telefone: '5511999887766', expected: 'Vanessa Souza' },
       { produto: 'PDL para equipes', telefone: '5511999887766', expected: 'Vanessa Souza' },
       { produto: 'Eneagrama corporativo', telefone: '5511999887766', expected: 'Lúcia Carcerere' },
-      { produto: 'Mentoria empresarial', telefone: '5511999887766', expected: 'Adonias' }, // era Helen Monte até 27/08/2026
-      { produto: 'Marketing digital', telefone: '5511999887766', expected: 'Adonias' }, // era Helen Monte até 27/08/2026
+      { produto: 'Mentoria empresarial', telefone: '5511999887766', expected: 'Maria Helena' }, // era Helen Monte até 27/08/2026
+      { produto: 'Marketing digital', telefone: '5511999887766', expected: 'Maria Helena' }, // era Helen Monte até 27/08/2026
       { produto: 'Consultoria geral', telefone: '5511999887766', expected: 'Maria Helena' }, // fallback
     ]
 
