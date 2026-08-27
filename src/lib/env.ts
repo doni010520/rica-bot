@@ -32,7 +32,11 @@ const EnvSchema = z.object({
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   DATABASE_URL: z.string().min(1),
-  SUPABASE_VECTOR_TABLE: z.string().default('documents'),
+  SUPABASE_VECTOR_TABLE: z.string().default('documents_base'),
+  // Piso de relevancia do RAG. Abaixo disso o trecho e descartado: o pgvector
+  // devolve SEMPRE os N mais proximos, mesmo quando nenhum tem a ver com a
+  // pergunta, e um trecho fora de contexto vira resposta errada com confianca.
+  RAG_MIN_SIMILARITY: z.string().optional().default('0.45').pipe(z.coerce.number().min(0).max(1)),
 
   // ── Redis ──────────────────────────────────────────────────────────────────
   REDIS_URL: z.string().min(1),

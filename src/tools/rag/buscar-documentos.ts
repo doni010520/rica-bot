@@ -87,15 +87,44 @@ export const buscar_documentos = tool({
         similarity?: number
       }>
 
-      logger.info({ found: documents.length, query: query.slice(0, 50) }, 'buscar_documentos: resultado')
+      // O pgvector devolve SEMPRE os `limit` vizinhos mais proximos -- inclusive
+      // quando NENHUM tem relacao com a pergunta. Sem um piso, perguntar "quanto
+      // custa o curso?" traz trecho sobre valuation de padaria com similaridade
+      // 0,4 e o modelo responde aquilo com toda a confianca. Melhor devolver
+      // vazio: o prompt manda a Rica nao improvisar numero.
+      const relevantes = documents.filter(
+        doc => (doc.similarity ?? 0) >= env.RAG_MIN_SIMILARITY,
+      )
+
+      logger.info(
+        {
+          found: documents.length,
+          relevantes: relevantes.length,
+          melhorSimilaridade: documents[0]?.similarity,
+          piso: env.RAG_MIN_SIMILARITY,
+          query: query.slice(0, 50),
+        },
+        'buscar_documentos: resultado',
+      )
 
       // Retorna conteúdo formatado para o LLM
-      const formattedDocs = documents.map((doc, i) => ({
+      const formattedDocs = relevantes.map((doc, i) => ({
         index: i + 1,
         content: doc.content,
         similarity: doc.similarity,
         source: (doc.metadata?.['source'] as string | undefined) ?? 'documento interno',
       }))
+
+      if (formattedDocs.length === 0) {
+        return {
+          success: true,
+          documents: [],
+          total: 0,
+          message:
+            'Nenhum documento com relevância suficiente. NÃO invente a resposta: ' +
+            'diga que vai confirmar com um especialista ou ofereça encaminhar.',
+        }
+      }
 
       return { success: true, documents: formattedDocs, total: formattedDocs.length }
     } catch (err) {
