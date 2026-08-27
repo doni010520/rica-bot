@@ -83,10 +83,19 @@ export async function createLeadEntry(
   data: { phone: string; name?: string },
 ): Promise<void> {
   try {
+    // ON CONFLICT (telefone) NÃO funciona aqui: a tabela só tem índice único em
+    // `id`, então o Postgres recusa com "no unique or exclusion constraint
+    // matching". Como o catch abaixo trata a falha como não-crítica, o INSERT
+    // vinha falhando em SILÊNCIO e nenhuma linha era criada — o que quebrava o
+    // takeover (setLidiaStatus é UPDATE: sem linha, não desliga nada).
+    //
+    // Criar o índice único resolveria, mas hoje há 40 telefones duplicados na
+    // tabela (811 linhas / 771 distintos), então a criação falharia. WHERE NOT
+    // EXISTS dá o mesmo efeito sem depender de constraint nem mexer no schema.
     await pool.query(
       `INSERT INTO "LeadsAlexy" (nome, telefone, status, "Follow-up", lidia)
-       VALUES ($1, $2, 'novo_lead', 'nao_enviado', 'ON')
-       ON CONFLICT (telefone) DO NOTHING`,
+       SELECT $1, $2, 'novo_lead', 'nao_enviado', 'ON'
+        WHERE NOT EXISTS (SELECT 1 FROM "LeadsAlexy" WHERE telefone = $2)`,
       [data.name ?? null, data.phone],
     )
     logger.info({ phone: data.phone }, 'Lead criado em LeadsAlexy')
