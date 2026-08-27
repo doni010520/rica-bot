@@ -40,22 +40,57 @@ describe('normalizePhone()', () => {
 
   describe('números internacionais (bug documentado: cliente dos EUA)', () => {
     it('número US 11 dígitos → mantém (sem adicionar 55)', () => {
-      // +1 (555) 123-4567 → 11 dígitos totais → adiciona 55... porém é caso especial
-      // Na prática, números US chegam do uazapi com código 1 já prefixado
-      // 15551234567 → 11 dígitos → tratado como BR? Depende da origem
-      // Bug histórico: não adicionar 55 em número que já tem código internacional
-      const us = '15551234567'
-      // Se tem 11 dígitos e começa com 1 (EUA), o sistema atual adicionaria 55
-      // Isso é o bug documentado — ao refinar, adicionar lógica de prefixo 1
-      // Por ora, testamos o comportamento atual e documentamos a limitação
-      const result = normalizePhone(us)
-      expect(typeof result).toBe('string')
-      expect(result.length).toBeGreaterThan(0)
+      // +1 (415) 555-1234 → NPA 415 e NXX 555 começam com 2-9 → NANP.
+      expect(normalizePhone('14155551234')).toBe('14155551234')
     })
 
-    it('número com 14+ dígitos → mantém sem adicionar 55', () => {
+    it('números NANP em formatos variados', () => {
+      expect(normalizePhone('+1 (415) 555-1234')).toBe('14155551234')
+      expect(normalizePhone('1-212-555-0199')).toBe('12125550199')
+      expect(normalizePhone('14155551234@s.whatsapp.net')).toBe('14155551234')
+      // Canadá: 604 (Vancouver)
+      expect(normalizePhone('16045550123')).toBe('16045550123')
+    })
+
+    it('US sem o código de país (10 dígitos) → indistinguível de BR, vira brasileiro', () => {
+      // Limitação assumida: 10 dígitos sem DDI é sempre tratado como brasileiro.
+      expect(normalizePhone('4155551234')).toBe('554155551234')
+    })
+
+    it('número com 12+ dígitos → mantém sem adicionar 55', () => {
       // Ex: número europeu +44 20 7946 0958 → 441279460958 (12 dígitos)
       expect(normalizePhone('441279460958')).toBe('441279460958')
+    })
+  })
+
+  describe('desambiguação BR × NANP em 11 dígitos', () => {
+    it('DDD 11 (São Paulo) → brasileiro (NPA do NANP nunca começa com 1)', () => {
+      expect(normalizePhone('11999887766')).toBe('5511999887766')
+    })
+
+    it.each(['12', '13', '14', '15', '16', '17', '18', '19'])(
+      'DDD %s + celular (9 + 8 dígitos) → brasileiro, não NANP',
+      (ddd) => {
+        // Esses DDDs passariam no teste de NPA (2-9), mas o 3º dígito "9" do
+        // celular brasileiro desempata a favor do caso dominante.
+        expect(normalizePhone(`${ddd}988776655`)).toBe(`55${ddd}988776655`)
+        expect(normalizePhone(`${ddd}912345678`)).toBe(`55${ddd}912345678`)
+      },
+    )
+
+    it('prefixo (NXX) começando com 0 ou 1 → não é NANP válido, mantém regra BR', () => {
+      // 1 + 555 (NPA ok) + 123 (NXX começa com 1 → inválido no NANP)
+      expect(normalizePhone('15551234567')).toBe('5515551234567')
+      // 1 + 415 (NPA ok) + 055 (NXX começa com 0 → inválido no NANP)
+      expect(normalizePhone('14150551234')).toBe('5514150551234')
+    })
+
+    it('10 dígitos começando com 1 → brasileiro (fixo com DDD 1X)', () => {
+      expect(normalizePhone('1133334444')).toBe('551133334444')
+    })
+
+    it('já com 55 na frente não passa pela heurística NANP', () => {
+      expect(normalizePhone('5514155551234')).toBe('5514155551234')
     })
   })
 
@@ -89,8 +124,10 @@ describe('extractDDD()', () => {
     expect(extractDDD('5521900000000')).toBe('21')
   })
   it('retorna null para número internacional', () => {
-    // Número com 14 dígitos não começa com 55
+    // Número com 12 dígitos não começa com 55
     expect(extractDDD('441279460958')).toBeNull()
+    // NANP não é mais prefixado com 55, então também não tem DDD
+    expect(extractDDD('14155551234')).toBeNull()
   })
 })
 
