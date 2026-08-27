@@ -13,15 +13,19 @@ import { crmHeaders } from '../lib/crm-client.js'
 import { logger } from '../observability/logger.js'
 
 type MessageDirection = 'in' | 'out'
-type ContentType = 'text' | 'image' | 'audio' | 'document' | 'system_note'
+type ContentType = 'text' | 'image' | 'audio' | 'video' | 'ptt' | 'document' | 'system_note'
 
 type SaveMessageParams = {
   phone: string
   direction: MessageDirection
   text: string
-  sender: string          // 'cliente' | 'rica_ai' | 'system_followup'
+  sender: string          // 'cliente' | 'rica_ai' | 'system_followup' | 'atendente'
   contentType?: ContentType | undefined
   dealId?: string | undefined
+  /** URL pública do arquivo, quando a mensagem é mídia. */
+  mediaUrl?: string | undefined
+  /** Tipo enviado à uazapi ('image' | 'ptt' | 'document' | ...). */
+  mediaType?: ContentType | undefined
 }
 
 /**
@@ -32,7 +36,7 @@ export function saveMessage(params: SaveMessageParams): void {
 }
 
 async function _saveMessage(params: SaveMessageParams): Promise<void> {
-  const { phone, direction, text, sender, contentType = 'text', dealId } = params
+  const { phone, direction, text, sender, contentType = 'text', dealId, mediaUrl, mediaType } = params
 
   try {
     const url = `${env.CRM_API_URL}/api/crm/messages?organization_id=${env.ORG_ID}`
@@ -41,8 +45,12 @@ async function _saveMessage(params: SaveMessageParams): Promise<void> {
       direction,
       text,
       sender,
-      content_type: contentType,
+      // O CRM deriva media_type do content_type e IGNORA um media_type solto
+      // (ver crm.js: `mediaType = content_type !== 'text' ? content_type : null`).
+      // Mandar o tipo aqui é o que faz a mídia gravar com tipo, e não nulo.
+      content_type: mediaType ?? contentType,
       deal_id: dealId,
+      ...(mediaUrl ? { media_url: mediaUrl } : {}),
       workflow_name: 'rica-bot',
       sent_at: new Date().toISOString(),
     }

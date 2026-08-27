@@ -22,6 +22,18 @@ type UazapiSendPayload = {
   delay?: string
 }
 
+/** Tipos que a uazapi aceita em /send/media. */
+export type TipoDeMidia = 'image' | 'audio' | 'video' | 'document' | 'ptt'
+
+type UazapiMediaPayload = {
+  number: string
+  type: TipoDeMidia
+  /** A uazapi NÃO recebe o arquivo: recebe uma URL e baixa de lá. */
+  file: string
+  text?: string
+  docName?: string
+}
+
 type SendOptions = OutboundCrmMeta & {
   chunkDelayMs?: number | undefined
   chunked?: boolean | undefined
@@ -29,8 +41,11 @@ type SendOptions = OutboundCrmMeta & {
 
 export type { OutboundCrmMeta }
 
-async function postToUazapi(body: UazapiSendPayload): Promise<void> {
-  const url = `${env.UAZAPI_BASE_URL}/send/text`
+async function postToUazapi(
+  body: UazapiSendPayload | UazapiMediaPayload,
+  caminho = '/send/text',
+): Promise<void> {
+  const url = `${env.UAZAPI_BASE_URL}${caminho}`
 
   await withRetry(
     async () => {
@@ -80,6 +95,64 @@ export async function sendWhatsApp(
     dealId: meta.dealId,
   })
   if (error) throw error
+}
+
+/**
+ * Envia mídia (imagem, áudio, vídeo ou documento) pelo WhatsApp.
+ *
+ * A uazapi NÃO recebe bytes: recebe uma URL e baixa o arquivo de lá. Por isso o
+ * arquivo precisa estar num lugar público ANTES desta chamada — hoje o bucket
+ * `media` do Supabase Storage.
+ *
+ * `ptt` é a mensagem de voz (a "bolinha" de áudio gravado); `audio` é arquivo de
+ * áudio anexado. Quem grava pelo microfone quer ptt.
+ */
+export async function sendWhatsAppMedia(
+  phone: string,
+  params: { url: string; tipo: TipoDeMidia; legenda?: string | undefined; nomeArquivo?: string | undefined },
+  meta: OutboundCrmMeta = {},
+): Promise<void> {
+  const number = formatPhoneForSend(phone)
+  const { url, tipo, legenda, nomeArquivo } = params
+  logger.debug({ phone: number.slice(-4), tipo }, 'sendWhatsAppMedia')
+
+  let error: unknown
+  try {
+    await postToUazapi(
+      {
+        number,
+        type: tipo,
+        file: url,
+        ...(legenda ? { text: legenda } : {}),
+        // Sem docName o cliente vê o nome gerado no storage em vez do original.
+        ...(tipo === 'document' && nomeArquivo ? { docName: nomeArquivo } : {}),
+      },
+      '/send/media',
+    )
+  } catch (e) {
+    error = e
+  }
+
+  logOutbound({
+    toPhone: number,
+    // O histórico precisa de texto: uma bolha vazia não diz nada a quem lê depois.
+    content: legenda || nomeArquivo || rotuloDaMidia(tipo),
+    status: error ? 'error' : 'sent',
+    error,
+    crmSender: meta.crmSender,
+    dealId: meta.dealId,
+    mediaUrl: url,
+    mediaType: tipo,
+  })
+  if (error) throw error
+}
+
+function rotuloDaMidia(tipo: TipoDeMidia): string {
+  if (tipo === 'image') return '[imagem]'
+  if (tipo === 'video') return '[vídeo]'
+  if (tipo === 'ptt') return '[mensagem de voz]'
+  if (tipo === 'audio') return '[áudio]'
+  return '[documento]'
 }
 
 export async function sendWhatsAppChunked(

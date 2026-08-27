@@ -17,7 +17,7 @@
 
 import type { Pool } from 'pg'
 import { logger } from '../observability/logger.js'
-import { sendWhatsApp } from '../uazapi/client.js'
+import { sendWhatsApp, sendWhatsAppMedia, type TipoDeMidia } from '../uazapi/client.js'
 import { checkLidiaStatus, createLeadEntry, setLidiaStatus } from '../lidia/status.js'
 
 /** `sender` gravado em deal_messages para a mensagem escrita por uma pessoa. */
@@ -52,6 +52,39 @@ export async function responderComoHumano(
     ...(dealId ? { dealId } : {}),
   })
   log.info({ atendente: atendente ?? '(não informado)', textoLen: texto.length }, 'atendente respondeu')
+
+  const iaDesligada = await assumirConversa(pool, telefone)
+  return { enviado: true, iaDesligada }
+}
+
+/**
+ * Envia um arquivo já hospedado e assume a conversa.
+ *
+ * A uazapi baixa o arquivo pela URL, então ele precisa estar público ANTES
+ * daqui — quem sobe para o bucket é o backend do CRM, que recebe os bytes do
+ * navegador. O bot não guarda arquivo: só repassa a URL.
+ */
+export async function enviarMidiaComoHumano(
+  pool: Pool,
+  params: {
+    telefone: string
+    url: string
+    tipo: TipoDeMidia
+    legenda?: string | undefined
+    nomeArquivo?: string | undefined
+    atendente?: string | undefined
+    dealId?: string | undefined
+  },
+): Promise<{ enviado: boolean; iaDesligada: boolean }> {
+  const { telefone, url, tipo, legenda, nomeArquivo, atendente, dealId } = params
+  const log = logger.child({ phone: telefone.slice(-4), context: 'atendimento-humano' })
+
+  await sendWhatsAppMedia(
+    telefone,
+    { url, tipo, legenda, nomeArquivo },
+    { crmSender: SENDER_ATENDENTE, ...(dealId ? { dealId } : {}) },
+  )
+  log.info({ atendente: atendente ?? '(não informado)', tipo }, 'atendente enviou mídia')
 
   const iaDesligada = await assumirConversa(pool, telefone)
   return { enviado: true, iaDesligada }

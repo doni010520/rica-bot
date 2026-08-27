@@ -40,8 +40,11 @@ export function logOutbound(params: {
   content: string
   status?: 'sent' | 'error'
   error?: unknown
+  /** Preenchidos quando a mensagem é mídia — ver sendWhatsAppMedia. */
+  mediaUrl?: string | undefined
+  mediaType?: 'image' | 'audio' | 'video' | 'ptt' | 'document' | undefined
 } & OutboundCrmMeta): void {
-  const { toPhone, content, status = 'sent', error, crmSender = 'rica_ai', dealId } = params
+  const { toPhone, content, status = 'sent', error, crmSender = 'rica_ai', dealId, mediaUrl, mediaType } = params
   const digits = toPhone.replace(/\D/g, '')
   const execName = EXEC_BY_DIGITS[digits]
   // isTeamPhone cobre EXECUTIVES + TEAM_PHONES (triagem/gestão/dev) e tolera o
@@ -57,6 +60,8 @@ export function logOutbound(params: {
       text: content,
       sender: crmSender,
       dealId,
+      ...(mediaUrl ? { mediaUrl } : {}),
+      ...(mediaType ? { mediaType } : {}),
     })
   }
 

@@ -10,7 +10,7 @@ import sensible from '@fastify/sensible'
 import cors from '@fastify/cors'
 import { env } from './lib/env.js'
 import { simularTurno, TELEFONE_SIMULADO } from './agent/simulador.js'
-import { responderComoHumano, quemAtende, assumirConversa, devolverParaRica } from './atendimento/humano.js'
+import { responderComoHumano, enviarMidiaComoHumano, quemAtende, assumirConversa, devolverParaRica } from './atendimento/humano.js'
 import { logger } from './observability/logger.js'
 import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
@@ -109,6 +109,42 @@ export async function buildApp() {
     } catch (err) {
       logger.error({ err }, '/admin/responder falhou')
       return reply.code(502).send({ error: 'falha ao enviar pelo WhatsApp' })
+    }
+  })
+
+  // ── /admin/responder-midia — envia arquivo já hospedado ─────────────────
+  app.post('/admin/responder-midia', async (request, reply) => {
+    if (env.ADMIN_TOKEN) {
+      const token = request.headers['x-admin-token']
+      if (token !== env.ADMIN_TOKEN) return reply.code(401).send({ error: 'unauthorized' })
+    }
+    const b = request.body as {
+      telefone?: string; url?: string; tipo?: string; legenda?: string
+      nomeArquivo?: string; atendente?: string; dealId?: string
+    }
+    const telefone = String(b?.telefone ?? '').replace(/\D/g, '')
+    const url = String(b?.url ?? '').trim()
+    const tipos = ['image', 'audio', 'video', 'document', 'ptt']
+    const tipo = String(b?.tipo ?? '')
+
+    if (!telefone || telefone.length < 10) return reply.code(400).send({ error: 'telefone inválido' })
+    if (!/^https?:\/\//i.test(url)) return reply.code(400).send({ error: 'url inválida' })
+    if (!tipos.includes(tipo)) return reply.code(400).send({ error: 'tipo inválido' })
+
+    try {
+      const r = await enviarMidiaComoHumano(getPool(), {
+        telefone,
+        url,
+        tipo: tipo as 'image' | 'audio' | 'video' | 'document' | 'ptt',
+        legenda: b?.legenda,
+        nomeArquivo: b?.nomeArquivo,
+        atendente: b?.atendente,
+        dealId: b?.dealId,
+      })
+      return reply.send(r)
+    } catch (err) {
+      logger.error({ err }, '/admin/responder-midia falhou')
+      return reply.code(502).send({ error: 'falha ao enviar a mídia pelo WhatsApp' })
     }
   })
 
