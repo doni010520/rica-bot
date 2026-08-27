@@ -25,6 +25,7 @@ import { resolveExecutiveByName, EXECUTIVES, type Executive } from './executives
 import { mapDDDToRegion } from './region-mapper.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { scheduleExecutiveFollowup } from '../followup/executive-followup.js'
+import { whatsappLink } from '../uazapi/normalize-phone.js'
 
 export type EncaminharLeadInput = {
   telefone: string
@@ -94,7 +95,7 @@ export async function encaminharLead(input: EncaminharLeadInput): Promise<Encami
 
   // 3. Avisa o executivo no WhatsApp
   const firstName = exec.name.split(' ')[0] ?? exec.name
-  const phoneLink = phone.replace(/^55/, '')
+  const linkDoLead = whatsappLink(phone)
   const execMsg =
     `🎯 *LEAD DESIGNADO PRA VOCÊ, ${firstName.toUpperCase()}!*\n\n` +
     `Oi ${firstName}! 👋 Aqui é a Rica 🤖\n\n` +
@@ -104,7 +105,7 @@ export async function encaminharLead(input: EncaminharLeadInput): Promise<Encami
     `📱 *Tel:* ${phone}\n` +
     `🎯 *Interesse:* ${produto || 'Não informado'}\n\n` +
     (mensagem ? `━━━━━━━━━━━━━━\n💬 *CONTEXTO*\n━━━━━━━━━━━━━━\n_"${mensagem}"_\n\n` : '') +
-    `⚡ *Clique para chamar no WhatsApp:*\nwa.me/${phoneLink}\n\n` +
+    `⚡ *Clique para chamar no WhatsApp:*\n${linkDoLead}\n\n` +
     `🤖 _Rica - Assistente de Vendas_`
   await sendWhatsApp(exec.phoneFormatted, execMsg)
 

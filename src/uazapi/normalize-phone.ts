@@ -112,6 +112,22 @@ export function formatPhoneForSend(phone: string): string {
  * phonesMatch('5511999887766', '11999887766')  // → true
  * phonesMatch('5511999887766', '5521999887766') // → false
  */
+/**
+ * Link de conversa no WhatsApp (wa.me).
+ *
+ * O wa.me EXIGE o número com código do país. Antes, quatro lugares montavam o
+ * link com `phone.replace(/^55/, '')` — o link saía como `wa.me/22997314556` e
+ * não abria conversa nenhuma: era a queixa do André, que não conseguia falar com
+ * os leads que a Rica encaminhava.
+ *
+ * Passa por `normalizePhone` de propósito, em vez de só preservar o "55": assim
+ * número dos EUA continua com o DDI dele (ver isNanpNumber) e celular sem o 9º
+ * dígito é corrigido antes de virar link.
+ */
+export function whatsappLink(phone: string): string {
+  return `https://wa.me/${normalizePhone(phone)}`
+}
+
 export function phonesMatch(a: string, b: string): boolean {
   return normalizePhone(a) === normalizePhone(b)
 }

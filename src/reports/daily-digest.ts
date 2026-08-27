@@ -22,6 +22,7 @@ import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { EXECUTIVES } from '../routing/executives.config.js'
+import { whatsappLink } from '../uazapi/normalize-phone.js'
 
 const MAX_LIST = 12 // máximo de itens por lista no WhatsApp
 
@@ -188,7 +189,7 @@ function formatDigest(d: DigestData, tip = ''): string {
     linhas.push('')
     linhas.push('*Sem responsável (distribuir):*')
     for (const x of d.semDono.slice(0, MAX_LIST)) {
-      const link = x.telefone ? ` — wa.me/${x.telefone}` : ''
+      const link = x.telefone ? ` — ${whatsappLink(x.telefone)}` : ''
       linhas.push(`• ${x.nome}${link}`)
     }
     if (d.semDono.length > MAX_LIST) linhas.push(`• (+${d.semDono.length - MAX_LIST} mais)`)

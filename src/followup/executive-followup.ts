@@ -22,6 +22,7 @@ import { isBusinessHour } from '../lib/timezone.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { EXECUTIVES } from '../routing/executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
+import { whatsappLink } from '../uazapi/normalize-phone.js'
 
 // ─── tipos ───────────────────────────────────────────────────────────────────
 
@@ -145,13 +146,13 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
 
   // 1. Monta mensagem para o executivo
   const firstName = data.executiveName.split(' ')[0] ?? data.executiveName
-  const phoneForLink = data.leadPhone.replace(/^55/, '')
+  const linkDoLead = whatsappLink(data.leadPhone)
 
   const execMessage =
     `Oi ${firstName}! 👋 Aqui é a Rica.\n\n` +
     `Encaminhamos um lead pra você:\n\n` +
     `👤 *${data.leadName || 'Não informado'}*\n` +
-    `📱 wa.me/${phoneForLink}\n` +
+    `📱 ${linkDoLead}\n` +
     `🎯 ${data.product || 'Não informado'}\n\n` +
     `Conseguiu falar com ele(a)? Como foi?\n` +
     `Me atualiza pra eu registrar no sistema! 😊\n\n` +

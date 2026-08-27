@@ -133,9 +133,21 @@ describe('createLeadEntry()', () => {
     expect(pool.query).toHaveBeenCalledOnce()
     const [sql, params] = (pool.query as Mock).mock.calls[0] as [string, unknown[]]
     expect(sql).toContain('INSERT INTO "LeadsAlexy"')
-    expect(sql).toContain('ON CONFLICT')
+    // ON CONFLICT (telefone) NÃO funciona: a tabela só tem índice único em `id`,
+    // e o Postgres recusa o comando. Como o catch trata a falha como não-crítica,
+    // o INSERT falhava em silêncio e o takeover não desligava a IA.
+    expect(sql).not.toContain('ON CONFLICT')
+    expect(sql).toContain('WHERE NOT EXISTS')
     expect(params).toContain('João Silva')
     expect(params).toContain('5511999887766')
+  })
+
+  it('não repete o lead quando o telefone já existe', async () => {
+    const pool = makeMockPool()
+    await createLeadEntry(pool as never, { phone: '5511999887766' })
+    const [sql] = (pool.query as Mock).mock.calls[0] as [string, unknown[]]
+    // a guarda tem que olhar o TELEFONE — é a chave real, mesmo sem constraint
+    expect(sql).toMatch(/WHERE NOT EXISTS[\s\S]*telefone\s*=/)
   })
 
   it('usa null quando nome não é fornecido', async () => {

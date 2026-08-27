@@ -26,6 +26,7 @@ import { routeToExecutive } from './executive-router.js'
 import { EXECUTIVES } from './executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { isBusinessHour } from '../lib/timezone.js'
+import { whatsappLink } from '../uazapi/normalize-phone.js'
 
 let _cronTask: ReturnType<typeof cron.schedule> | null = null
 
@@ -71,13 +72,13 @@ async function assignOwner(phone: string, email: string, via: string): Promise<v
 
 function naoQualificadoMsg(execName: string, nome: string, phone: string, produto: string): string {
   const first = execName.split(' ')[0] ?? execName
-  const link = phone.replace(/^55/, '')
+  const linkDoLead = whatsappLink(phone)
   return (
     `🔔 *LEAD NÃO QUALIFICADO*\n\n` +
     `Oi ${first}! Esse lead chegou pela Rica mas não respondeu / não qualificou no prazo. ` +
     `Te passo pra você avaliar e dar sequência:\n\n` +
     `👤 ${nome || 'Não informado'}\n` +
-    `📱 wa.me/${link}\n` +
+    `📱 ${linkDoLead}\n` +
     `🎯 ${produto}\n\n` +
     `🤖 Rica`
   )

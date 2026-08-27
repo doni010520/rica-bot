@@ -16,6 +16,7 @@
 
 import { EXECUTIVES, type Executive } from './executives.config.js'
 import { mapDDDToRegion } from './region-mapper.js'
+import { whatsappLink } from '../uazapi/normalize-phone.js'
 
 export type RoutingResult = {
   executive: Executive
@@ -169,7 +170,7 @@ export function buildExecutiveMessage(params: {
 }): string {
   const { executiveName, leadName, leadPhone, leadCompany, leadEmail, product, message, resumoDiagnostico, state, ddd } = params
   const firstName = executiveName.split(' ')[0] ?? executiveName
-  const phoneForLink = leadPhone.replace(/^55/, '')
+  const linkDoLead = whatsappLink(leadPhone)
 
   return (
     `🔥 *NOVO LEAD QUENTINHO!*\n\n` +
@@ -188,7 +189,7 @@ export function buildExecutiveMessage(params: {
       : '') +
     `🔥 *${firstName}, esse lead está fresquinho!*\n` +
     `Quanto mais rápido você fizer contato, maior a chance de fechar! 💪\n\n` +
-    `⚡ *Clique para chamar no WhatsApp:*\nwa.me/${phoneForLink}\n\n` +
+    `⚡ *Clique para chamar no WhatsApp:*\n${linkDoLead}\n\n` +
     `🤖 _Rica - Assistente de Vendas_`
   )
 }
