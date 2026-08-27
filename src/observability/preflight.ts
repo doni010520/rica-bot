@@ -18,6 +18,7 @@
 import IORedis from 'ioredis'
 import { createClient } from '@supabase/supabase-js'
 import { env } from '../lib/env.js'
+import { crmHeaders } from '../lib/crm-client.js'
 import { getPool } from '../lib/db.js'
 import { logger } from './logger.js'
 
@@ -93,7 +94,7 @@ async function checkRedis(): Promise<CheckResult> {
 
 async function checkCrmApi(): Promise<CheckResult> {
   const url = `${env.CRM_API_URL}/api/crm/pipelines?organization_id=${env.ORG_ID}`
-  const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+  const res = await fetch(url, { headers: crmHeaders(), signal: AbortSignal.timeout(5000) })
   const data = await res.json() as unknown[]
   const pipelineCount = Array.isArray(data) ? data.length : 0
   return {

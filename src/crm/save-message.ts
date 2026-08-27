@@ -9,6 +9,7 @@
  */
 
 import { env } from '../lib/env.js'
+import { crmHeaders } from '../lib/crm-client.js'
 import { logger } from '../observability/logger.js'
 
 type MessageDirection = 'in' | 'out'
@@ -48,7 +49,7 @@ async function _saveMessage(params: SaveMessageParams): Promise<void> {
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: crmHeaders(),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(5_000),
     })

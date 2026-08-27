@@ -100,11 +100,16 @@ function phoneKey(phone: string): string {
   return `${ddd}${d.slice(-8)}`
 }
 
-/** Executivos (EXEC_*_PHONE) + time que não é executivo (TEAM_PHONES: Malu, Adonias...). */
+/**
+ * Executivos (EXEC_*_PHONE) + time que não é executivo (TEAM_PHONES: Malu,
+ * Adonias...) + o dev que recebe as aprovações (APPROVAL_FORWARD_PHONE, incluído
+ * aqui para não depender de alguém lembrar de repeti-lo em TEAM_PHONES).
+ */
 const TEAM_PHONE_KEYS = new Set(
   [
     ...Object.values(EXECUTIVES).map((e) => e.phoneFormatted),
     ...env.TEAM_PHONES.split(',').map((s) => s.trim()),
+    env.APPROVAL_FORWARD_PHONE,
   ]
     .map(phoneKey)
     .filter(Boolean),

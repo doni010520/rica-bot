@@ -18,6 +18,7 @@
 
 import { env } from '../lib/env.js'
 import { normalizePhone } from '../uazapi/normalize-phone.js'
+import { sendWhatsApp } from '../uazapi/client.js'
 import { logger } from '../observability/logger.js'
 
 // ─── regex (fonte de verdade: extraída do IF_Candidato do n8n) ────────────────
@@ -43,14 +44,19 @@ export function isJobCandidate(message: string): boolean {
  * 1. Envia WhatsApp para Vanessa com nome/telefone/mensagem do candidato
  * 2. Responde ao candidato orientando a enviar currículo por email
  *
+ * Os dois envios passam pelo sendWhatsApp para cair no logOutbound: o aviso ao
+ * RH é EQUIPE (não vai pro thread), enquanto a resposta ao candidato é a única
+ * mensagem que ele recebe — sem ela o CRM mostraria a pergunta dele sem réplica.
+ *
  * @returns true se notificação foi enviada com sucesso
  */
 export async function notifyHR(params: {
   candidatePhone: string
   candidateName: string
   candidateMessage: string
+  dealId?: string | undefined
 }): Promise<boolean> {
-  const { candidatePhone, candidateName, candidateMessage } = params
+  const { candidatePhone, candidateName, candidateMessage, dealId } = params
   const log = logger.child({ fn: 'notifyHR', candidatePhone: candidatePhone.slice(-4) })
 
   const hrPhone = normalizePhone(env.HR_NOTIFY_PHONE)
@@ -71,23 +77,14 @@ export async function notifyHR(params: {
     `Nossa equipe de RH entrará em contato em breve. Boa sorte! 🍀`
 
   try {
-    const baseUrl = `${env.UAZAPI_BASE_URL}/send/text`
-    const headers = { 'Content-Type': 'application/json', token: env.UAZAPI_TOKEN }
+    // Aviso ao RH: destinatário é do time — crmSender null garante que não entra
+    // no thread do lead nem se HR_NOTIFY_PHONE ficar fora de TEAM_PHONES.
+    await sendWhatsApp(hrPhone, hrMessage, { crmSender: null })
 
-    // Envia para Vanessa (RH)
-    await fetch(baseUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ number: hrPhone, text: hrMessage, delay: '3000' }),
-      signal: AbortSignal.timeout(8_000),
-    })
-
-    // Responde ao candidato
-    await fetch(baseUrl, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ number: normalizePhone(candidatePhone), text: candidateReply, delay: '3000' }),
-      signal: AbortSignal.timeout(8_000),
+    // Responde ao candidato — entra no thread como resposta da Rica.
+    await sendWhatsApp(normalizePhone(candidatePhone), candidateReply, {
+      crmSender: 'system_candidato',
+      dealId,
     })
 
     log.info('Candidato notificado — HR e candidato informados')

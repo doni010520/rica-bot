@@ -13,7 +13,7 @@ import { sleep } from '../lib/timezone.js'
 import { formatPhoneForSend } from './normalize-phone.js'
 import { withRetry } from '../lib/retry.js'
 import { logger } from '../observability/logger.js'
-import { logOutbound } from '../observability/outbound-log.js'
+import { logOutbound, type OutboundCrmMeta } from '../observability/outbound-log.js'
 
 // Payload exato que a uazapi aceita (confirmado nos nós "enviar mensagem*" do n8n)
 type UazapiSendPayload = {
@@ -22,10 +22,12 @@ type UazapiSendPayload = {
   delay?: string
 }
 
-type SendOptions = {
+type SendOptions = OutboundCrmMeta & {
   chunkDelayMs?: number | undefined
   chunked?: boolean | undefined
 }
+
+export type { OutboundCrmMeta }
 
 async function postToUazapi(body: UazapiSendPayload): Promise<void> {
   const url = `${env.UAZAPI_BASE_URL}/send/text`
@@ -56,7 +58,11 @@ async function postToUazapi(body: UazapiSendPayload): Promise<void> {
   )
 }
 
-export async function sendWhatsApp(phone: string, text: string): Promise<void> {
+export async function sendWhatsApp(
+  phone: string,
+  text: string,
+  meta: OutboundCrmMeta = {},
+): Promise<void> {
   const number = formatPhoneForSend(phone)
   logger.debug({ phone: number.slice(-4), textLen: text.length }, 'sendWhatsApp')
   let error: unknown
@@ -65,7 +71,14 @@ export async function sendWhatsApp(phone: string, text: string): Promise<void> {
   } catch (e) {
     error = e
   }
-  logOutbound({ toPhone: number, content: text, status: error ? 'error' : 'sent', error })
+  logOutbound({
+    toPhone: number,
+    content: text,
+    status: error ? 'error' : 'sent',
+    error,
+    crmSender: meta.crmSender,
+    dealId: meta.dealId,
+  })
   if (error) throw error
 }
 
@@ -101,15 +114,28 @@ export async function sendWhatsAppChunked(
     error = e
   }
   // Grava a mensagem completa (não fragmentada) no log persistente
-  logOutbound({ toPhone: number, content: text, status: error ? 'error' : 'sent', error })
+  logOutbound({
+    toPhone: number,
+    content: text,
+    status: error ? 'error' : 'sent',
+    error,
+    crmSender: opts.crmSender,
+    dealId: opts.dealId,
+  })
   if (error) throw error
 }
 
-export async function sendFallbackMessage(phone: string): Promise<void> {
-  await sendWhatsApp(phone, 'Tive algum problema aqui no meu whatsapp, pode repetir o que você escreveu? 🙏')
+export async function sendFallbackMessage(phone: string, dealId?: string): Promise<void> {
+  await sendWhatsApp(
+    phone,
+    'Tive algum problema aqui no meu whatsapp, pode repetir o que você escreveu? 🙏',
+    { crmSender: 'system_fallback', dealId },
+  )
   logger.warn({ phone: phone.slice(-4) }, 'Fallback message enviado')
 }
 
 export async function sendMemoryClearedMessage(phone: string): Promise<void> {
-  await sendWhatsApp(phone, 'Memória limpa! podemos começar do zero.')
+  await sendWhatsApp(phone, 'Memória limpa! podemos começar do zero.', {
+    crmSender: 'system_comando',
+  })
 }

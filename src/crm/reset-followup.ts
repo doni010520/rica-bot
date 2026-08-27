@@ -11,6 +11,7 @@
  */
 
 import { env } from '../lib/env.js'
+import { crmHeaders } from '../lib/crm-client.js'
 import { logger } from '../observability/logger.js'
 
 /**
@@ -30,7 +31,7 @@ async function _resetFollowup(phone: string): Promise<void> {
 
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: crmHeaders(),
       body: JSON.stringify({
         phone,
         organization_id: env.ORG_ID,

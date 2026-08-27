@@ -53,7 +53,7 @@ export async function tryApproval(pool: Pool, phone: string, message: string): P
     `_Me repassa essa aprovação que eu aplico no prompt da Rica._`
 
   try {
-    await sendWhatsApp(env.APPROVAL_FORWARD_PHONE, devMsg)
+    await sendWhatsApp(env.APPROVAL_FORWARD_PHONE, devMsg, { crmSender: null })
   } catch (err) {
     log.error({ err }, 'Falha ao encaminhar aprovação ao dev')
   }
@@ -61,6 +61,7 @@ export async function tryApproval(pool: Pool, phone: string, message: string): P
     await sendWhatsApp(
       EXECUTIVES.MARIA_HELENA.phoneFormatted,
       'Anotado! 🙌 Já encaminhei sua aprovação pro Adonias aplicar essa mudança no meu atendimento.',
+      { crmSender: null },
     )
   } catch (err) {
     log.warn({ err }, 'Falha ao confirmar à gestora')

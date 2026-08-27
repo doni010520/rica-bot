@@ -4,13 +4,29 @@
  * Cliente HTTP base para o CRM API próprio da Sucesso.
  * Todas as 14 tools CRM usam este cliente.
  *
- * Autenticação: query param `organization_id` (mesmo padrão do n8n).
+ * Autenticação: query param `organization_id` (mesmo padrão do n8n) + header
+ * `x-service-token` quando CRM_SERVICE_TOKEN estiver preenchida (o CRM passa a
+ * exigir o token para aceitar o acesso por organization_id).
  * Base URL: env.CRM_API_URL (configurar por ambiente).
  */
 
 import { env } from './env.js'
 import { withRetry } from './retry.js'
 import { logger } from '../observability/logger.js'
+
+/**
+ * Headers padrão de toda chamada ao CRM.
+ * O `x-service-token` só é enviado se CRM_SERVICE_TOKEN estiver configurada —
+ * mantém compatibilidade com o CRM antes do rollout do SERVICE_API_KEY.
+ * NUNCA usar estes headers para uazapi ou OpenAI.
+ */
+export function crmHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return {
+    'Content-Type': 'application/json',
+    ...(env.CRM_SERVICE_TOKEN ? { 'x-service-token': env.CRM_SERVICE_TOKEN } : {}),
+    ...extra,
+  }
+}
 
 export class CrmApiError extends Error {
   constructor(
@@ -54,7 +70,7 @@ export async function crmRequest<T = unknown>(
     async () => {
       const res = await fetch(url.toString(), {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: crmHeaders(),
         ...(body ? { body: JSON.stringify(body) } : {}),
         signal: AbortSignal.timeout(timeoutMs),
       })

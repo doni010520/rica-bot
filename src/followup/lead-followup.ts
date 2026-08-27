@@ -2,8 +2,8 @@
  * src/followup/lead-followup.ts
  *
  * Follow-up INTELIGENTE de leads — agendador próprio do rica-bot (não depende
- * da API do CRM). Substitui o worker por cron (followup/worker.ts, que dependia
- * de /deals/followup-candidates).
+ * da API do CRM para descobrir candidatos). É o ÚNICO mecanismo de follow-up de
+ * lead: substituiu o worker por cron que consumia /deals/followup-candidates.
  *
  * Modelo:
  *   - Toda vez que a Rica responde um lead, agenda o toque 1 (scheduleLeadFollowup).
@@ -14,6 +14,11 @@
  *
  * Cadência (business hours, configurável via LEAD_FOLLOWUP_DELAYS_HOURS):
  *   toque 1 = +2h · toque 2 = +24h · toque 3 = +72h · depois para.
+ *
+ * Encerramento: ao esgotar a régua sem resposta, o deal é fechado como perdido
+ * via PATCH /deals/:id/close-no-response (lost_reason = sem_resposta_followup).
+ * Herda a responsabilidade do antigo POST /deals/close-inactive, que rodava em
+ * massa no worker por cron e dependia do contador followup_count do CRM.
  *
  * "Só leads novos daqui pra frente": como só agenda para quem interage a partir
  * de agora, o backlog parado nunca entra — sem varredura, sem disparo em massa.
@@ -30,6 +35,7 @@ import { logger, followupLogger } from '../observability/logger.js'
 import { loadChatHistory, historyToMessages } from '../memory/postgres-chat.js'
 import { checkLidiaStatus } from '../lidia/status.js'
 import { isTeamPhone } from '../routing/executives.config.js'
+import { crmRequest } from '../lib/crm-client.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { calculateBusinessHourDelayMs } from './executive-followup.js'
 
@@ -181,7 +187,8 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
 
   // 1.5. Já foi transferido pra um executivo (ou o deal fechou)? Então para —
   //      quem cuida do lead agora é o executivo, não a Rica.
-  if (!(await leadIsOpenAndUnassigned(pool, phone))) {
+  const lead = await findOpenUnassignedDeal(pool, phone)
+  if (!lead.open) {
     log.info('lead-followup: lead transferido/fechado — encerrando régua')
     return
   }
@@ -208,8 +215,9 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
     return
   }
 
-  // 5. Envia (logOutbound cuida do registro em rica_mensagens_enviadas).
-  await sendWhatsApp(phone, text)
+  // 5. Envia. O logOutbound cuida do registro em rica_mensagens_enviadas e,
+  //    por ser um LEAD, espelha o toque em deal_messages (thread do CRM).
+  await sendWhatsApp(phone, text, { crmSender: 'system_followup', dealId: lead.dealId })
   log.info({ attempt, touches: MAX_TOUCHES }, `✅ Follow-up de lead enviado (toque ${attempt})`)
 
   // 6. Agenda o próximo toque (se ainda houver).
@@ -217,23 +225,52 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
     await scheduleLeadFollowup(phone, attempt + 1)
   } else {
     log.info('lead-followup: última régua enviada — encerrando cobrança deste lead')
+    // 7. Régua esgotada sem resposta → fecha o deal como perdido no CRM.
+    await closeDealNoResponse(lead.dealId, phone)
   }
 }
+
+/**
+ * Fecha o deal como perdido por ausência de resposta após a régua completa.
+ * Substitui o POST /deals/close-inactive em massa do worker legado: aqui a
+ * decisão é por lead, no momento exato em que a régua se esgota.
+ * Fail-soft: erro do CRM não invalida o toque que já foi enviado.
+ */
+async function closeDealNoResponse(dealId: string | undefined, phone: string): Promise<void> {
+  const log = followupLogger(phone.slice(-4))
+  if (!dealId) {
+    log.warn('lead-followup: deal_id desconhecido — não deu pra fechar o deal sem resposta')
+    return
+  }
+  try {
+    await crmRequest(`/api/crm/deals/${encodeURIComponent(dealId)}/close-no-response`, {
+      method: 'PATCH',
+      operationName: 'close_no_response',
+    })
+    log.info({ dealId }, '🔒 Deal fechado como perdido (sem resposta após a régua)')
+  } catch (err) {
+    log.warn({ err, dealId }, 'lead-followup: falha ao fechar deal sem resposta (ignorado)')
+  }
+}
+
+/** Resultado da checagem do deal do lead. `dealId` fica indefinido no fail-open. */
+type OpenDealLookup = { open: boolean; dealId?: string | undefined }
 
 /**
  * Só faz follow-up se o lead ainda for um deal ABERTO e SEM DONO.
  * Se já foi transferido pra um executivo (owner_id preenchido) ou o deal
  * fechou (won/lost → sem deal open sem dono), a régua para.
+ * Devolve também o deal_id, usado pra fechar o deal ao esgotar a régua.
  * Match tolerante ao 9º dígito (DDD + últimos 8 dígitos), igual transfer-stale.
  * Fail-open: erro de DB não mata o follow-up.
  */
-async function leadIsOpenAndUnassigned(pool: Pool, phone: string): Promise<boolean> {
+async function findOpenUnassignedDeal(pool: Pool, phone: string): Promise<OpenDealLookup> {
   const digits = phone.replace(/\D/g, '')
   const ddd = digits.slice(2, 4)
   const last8 = digits.slice(-8)
   try {
-    const res = await pool.query(
-      `SELECT 1 FROM deals
+    const res = await pool.query<{ id: string }>(
+      `SELECT id FROM deals
        WHERE organization_id = $1
          AND status = 'open'
          AND owner_id IS NULL
@@ -242,10 +279,11 @@ async function leadIsOpenAndUnassigned(pool: Pool, phone: string): Promise<boole
        LIMIT 1`,
       [env.ORG_ID, `%${last8}`, `55${ddd}%`],
     )
-    return (res.rowCount ?? 0) > 0
+    const row = res.rows[0]
+    return row ? { open: true, dealId: row.id } : { open: false }
   } catch (err) {
     logger.warn({ err, phone: phone.slice(-4) }, 'lead-followup: falha ao checar transferência — seguindo (fail-open)')
-    return true
+    return { open: true }
   }
 }
 

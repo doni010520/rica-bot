@@ -9,8 +9,7 @@
  *   3. saveMessage (in)
  *   4. isJobCandidate → se true: notifyHR + return
  *   5. runRica com tools + CrmContext real
- *   6. saveMessage (out)
- *   7. sendWhatsAppChunked
+ *   6. sendWhatsAppChunked (o espelho em deal_messages sai do logOutbound)
  */
 
 import type { Pool } from 'pg'
@@ -30,7 +29,12 @@ import { runRica } from '../agent/rica.js'
 import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
 import { encaminharLeadManual } from '../copiloto/encaminhar.js'
 import { tryApproval } from '../copiloto/aprovacoes.js'
-import { sendWhatsApp, sendWhatsAppChunked, sendFallbackMessage } from '../uazapi/client.js'
+import {
+  sendWhatsApp,
+  sendWhatsAppChunked,
+  sendFallbackMessage,
+  sendMemoryClearedMessage,
+} from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
 import { isTeamPhone } from '../routing/executives.config.js'
 import { logger, webhookLogger } from '../observability/logger.js'
@@ -121,7 +125,7 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
 
   if (cmd === 'limpar') {
     await clearChatHistory(deps.pool, phone)
-    await sendWhatsApp(phone, 'Memória limpa! podemos começar do zero.')
+    await sendMemoryClearedMessage(phone)
     log.info('Memória limpa por LimparDados')
     return
   }
@@ -169,7 +173,8 @@ export async function handleBufferedMessage(
       resposta = copi.answer || 'Não consegui responder agora 😕'
       log.info('Copiloto respondeu (membro do time)')
     }
-    await sendWhatsAppChunked(phone, resposta)
+    // crmSender: null — o copiloto atende o TIME, não é conversa de lead.
+    await sendWhatsAppChunked(phone, resposta, { crmSender: null })
     await saveChatTurn(deps.pool, phone, combinedText, resposta).catch(() => {})
     return
   }
@@ -185,6 +190,7 @@ export async function handleBufferedMessage(
       await sendWhatsApp(
         phone,
         'Oi! Tive um problema aqui no sistema e não consegui processar sua mensagem agora 😕 Pode mandar de novo daqui a pouquinho?',
+        { crmSender: null },
       ).catch(() => {})
     } else {
       // O CRM afirmou "não é time" → falta cadastrar o whatsapp em users.whatsapp.
@@ -216,6 +222,7 @@ export async function handleBufferedMessage(
       candidatePhone: phone,
       candidateName: crm.contactName ?? '',
       candidateMessage: combinedText,
+      dealId: crm.dealId,
     })
     return // Rica não responde para candidatos
   }
@@ -225,25 +232,21 @@ export async function handleBufferedMessage(
   const result = await runRica({ phone, displayName: crm.contactName ?? '', userMessage: combinedText, crm, tools }, deps.pool)
 
   if (result.usedFallback || !result.text) {
-    await sendFallbackMessage(phone)
+    await sendFallbackMessage(phone, crm.dealId)
     log.warn('Fallback enviado')
     return
   }
 
-  // 5. Salvar resposta da Rica (direction=out) — fire-and-forget
-  saveMessage({
-    phone,
-    direction: 'out',
-    text: result.text,
-    sender: 'rica_ai',
+  // 5. Envia em chunks com delay. NÃO chamar saveMessage aqui: o logOutbound
+  //    (dentro do sendWhatsAppChunked) já espelha a resposta em deal_messages —
+  //    salvar de novo duplicaria a mensagem no thread do CRM.
+  await sendWhatsAppChunked(phone, result.text, {
+    crmSender: 'rica_ai',
     dealId: crm.dealId,
   })
-
-  // 6. Envia em chunks com delay
-  await sendWhatsAppChunked(phone, result.text)
   log.info({ chunks: result.text.split('\n\n').filter(Boolean).length }, 'Resposta enviada')
 
-  // 7. Agenda follow-up inteligente (toque 1). Cancelado se o lead responder.
+  // 6. Agenda follow-up inteligente (toque 1). Cancelado se o lead responder.
   void scheduleLeadFollowup(phone, 1)
 }
 

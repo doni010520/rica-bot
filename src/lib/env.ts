@@ -40,14 +40,14 @@ const EnvSchema = z.object({
   // ── CRM API ────────────────────────────────────────────────────────────────
   CRM_API_URL: z.string().url(),
   ORG_ID: z.string().uuid(),
+  // Token de autenticação de serviço (header x-service-token). Opcional:
+  // enquanto SERVICE_API_KEY não estiver configurada no CRM, o acesso por
+  // organization_id continua valendo e o header é simplesmente ignorado.
+  CRM_SERVICE_TOKEN: z.string().optional().default(''),
 
-  // ── Follow-up (leads) ───────────────────────────────────────────────────────
-  // Liga/desliga o disparo de follow-up de leads (default OFF — evita disparo em massa sem rollout controlado)
-  FOLLOWUP_ENABLED: z.string().optional().default('false').transform((v) => v === 'true'),
-  FOLLOWUP_CRON: z.string().default('0 9-18 * * 1-5'),
+  // ── Timezone dos workers agendados por cron ────────────────────────────────
+  // Usada pelo digest diário, insights semanais e transferência de stale.
   FOLLOWUP_TIMEZONE: z.string().default('America/Sao_Paulo'),
-  FOLLOWUP_MAX_ATTEMPTS: intStr(3),
-  FOLLOWUP_CLOSE_AFTER_DAYS: intStr(7),
 
   // ── Follow-up (executivos — cobrança de status) ────────────────────────────
   // Após encaminhar lead, Rica cobra o executivo N horas depois.
@@ -55,8 +55,8 @@ const EnvSchema = z.object({
   EXEC_FOLLOWUP_DELAY_HOURS: intStr(24),
 
   // ── Follow-up de leads (agendador próprio do rica-bot — BullMQ) ─────────────
-  // Substitui o worker por cron (FOLLOWUP_*). Só agenda pra quem interage a
-  // partir de agora (backlog antigo nunca entra); cancela quando o lead responde.
+  // Único mecanismo de follow-up de lead. Só agenda pra quem interage a partir
+  // de agora (backlog antigo nunca entra); cancela quando o lead responde.
   LEAD_FOLLOWUP_ENABLED: z.string().optional().default('true').transform((v) => v !== 'false'),
   // Régua de toques em horas (ajustada a horário comercial). Ex: "2,24,72".
   LEAD_FOLLOWUP_DELAYS_HOURS: z.string().default('2,24,72'),
