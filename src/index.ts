@@ -9,6 +9,7 @@ import Fastify from 'fastify'
 import sensible from '@fastify/sensible'
 import cors from '@fastify/cors'
 import { env } from './lib/env.js'
+import { simularTurno, TELEFONE_SIMULADO } from './agent/simulador.js'
 import { logger } from './observability/logger.js'
 import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
@@ -72,6 +73,58 @@ export async function buildApp() {
     return reply
       .code(report.overall === 'critical' ? 503 : 200)
       .send(report)
+  })
+
+  // ── /admin/simular — conversa de teste com a Rica, sem WhatsApp ─────────
+  //
+  // A equipe não consegue se testar como cliente: quem está em TEAM_PHONES cai
+  // no copiloto, e testar de um número de fora cria lead de verdade no funil.
+  //
+  // Nada aqui é gravado (nem memória do chat, nem deal_messages) e as tools que
+  // enviam WhatsApp ou mexem no CRM são interceptadas — ver src/agent/simulador.ts.
+  app.post('/admin/simular', async (request, reply) => {
+    if (env.ADMIN_TOKEN) {
+      const token = request.headers['x-admin-token']
+      if (token !== env.ADMIN_TOKEN) {
+        return reply.code(401).send({ error: 'unauthorized' })
+      }
+    }
+
+    const corpo = request.body as {
+      mensagens?: Array<{ papel?: string; texto?: string }>
+      nome?: string
+      comTools?: boolean
+    }
+
+    const mensagens = (corpo?.mensagens ?? [])
+      .filter((m) => typeof m?.texto === 'string' && m.texto.trim() !== '')
+      .map((m) => ({
+        papel: m.papel === 'rica' ? ('rica' as const) : ('lead' as const),
+        texto: String(m.texto).slice(0, 4000),
+      }))
+
+    if (mensagens.length === 0) {
+      return reply.code(400).send({ error: 'envie ao menos uma mensagem' })
+    }
+    if (mensagens.length > 40) {
+      return reply.code(400).send({ error: 'conversa longa demais (máx. 40 mensagens)' })
+    }
+
+    try {
+      const turno = await simularTurno(mensagens, getPool(), {
+        nome: corpo?.nome,
+        comTools: corpo?.comTools,
+      })
+      return reply.send({
+        resposta: turno.texto,
+        chamadas: turno.chamadas,
+        passos: turno.passos,
+        telefone_simulado: TELEFONE_SIMULADO,
+      })
+    } catch (err) {
+      logger.error({ err }, '/admin/simular falhou')
+      return reply.code(500).send({ error: 'falha ao simular' })
+    }
   })
 
   // ── /admin/logs — ring buffer dos últimos 2000 logs em memória ──────────
