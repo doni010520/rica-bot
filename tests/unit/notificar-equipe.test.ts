@@ -100,12 +100,12 @@ describe('notificar_equipe tool', () => {
       { produto: 'GPS Padaria', telefone: '5581999887766', expected: 'André Augusto' }, // GPS wins over padaria
       { produto: 'panificadora', telefone: '5581999887766', expected: 'Gabriela Câmara' }, // padaria nordeste
       { produto: 'Diagnóstico supermercado', telefone: '5511999887766', expected: 'Irelene Guerreiro' },
-      { produto: 'Cafeteria gourmet', telefone: '5511999887766', expected: 'Ana Clara' },
+      { produto: 'Cafeteria gourmet', telefone: '5511999887766', expected: 'Gabriela Câmara' }, // era Ana Clara até 27/08/2026
       { produto: 'Treinamento de líderes', telefone: '5511999887766', expected: 'Vanessa Souza' },
       { produto: 'PDL para equipes', telefone: '5511999887766', expected: 'Vanessa Souza' },
       { produto: 'Eneagrama corporativo', telefone: '5511999887766', expected: 'Lúcia Carcerere' },
-      { produto: 'Mentoria empresarial', telefone: '5511999887766', expected: 'Helen Monte' },
-      { produto: 'Marketing digital', telefone: '5511999887766', expected: 'Helen Monte' },
+      { produto: 'Mentoria empresarial', telefone: '5511999887766', expected: 'Adonias' }, // era Helen Monte até 27/08/2026
+      { produto: 'Marketing digital', telefone: '5511999887766', expected: 'Adonias' }, // era Helen Monte até 27/08/2026
       { produto: 'Consultoria geral', telefone: '5511999887766', expected: 'Maria Helena' }, // fallback
     ]
 

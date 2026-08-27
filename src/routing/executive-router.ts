@@ -9,11 +9,12 @@
  * - Alexy é catch-all nacional → Alex (não segue regional como padaria)
  * - Treinamentos/PDL → Vanessa (prioridade 1)
  * - Eneagrama/autoconhecimento → Lúcia (prioridade 2)
- * - MKT/Planejamento/Mentoria → Helen Monte (não mais no fallback)
+ * - MKT/Planejamento/Mentoria → Adonias (era Helen Monte até 27/08/2026)
+ * - Cafeteria → Gabriela Câmara (era Ana Clara até 27/08/2026)
  * - Fallback → 100% Maria Helena (sem hash 50/50 — era bug da versão anterior)
  */
 
-import { EXECUTIVES, type Executive } from './executives.config.js'
+import { ADONIAS, EXECUTIVES, type Executive } from './executives.config.js'
 import { mapDDDToRegion } from './region-mapper.js'
 
 export type RoutingResult = {
@@ -121,10 +122,11 @@ export function routeToExecutive(
     reason = 'Segmento Supermercado — Irelene'
   }
 
-  // ── 7. CAFETERIA → Ana Clara ──────────────────────────────────────────────
+  // ── 7. CAFETERIA → Gabriela ───────────────────────────────────────────────
+  // Era Ana Clara ate 27/08/2026; ela saiu da empresa.
   else if (isCafeteria) {
-    executive = EXECUTIVES.ANA_CLARA
-    reason = 'Segmento Cafeteria — Ana Clara'
+    executive = EXECUTIVES.GABRIELA
+    reason = 'Segmento Cafeteria — Gabriela'
   }
 
   // ── 8. MKT / Planejamento / Mentoria → Helen ──────────────────────────────
@@ -136,8 +138,11 @@ export function routeToExecutive(
     p.includes('planejamento comercial') ||
     p.includes('mentoria')
   ) {
-    executive = EXECUTIVES.HELEN
-    reason = 'MKT/Planejamento/Mentoria — Helen'
+    // Era Helen Monte ate 27/08/2026; passou a vir para o Adonias.
+    executive = ADONIAS ?? EXECUTIVES.MARIA_HELENA
+    reason = ADONIAS
+      ? 'MKT/Planejamento/Mentoria — Adonias'
+      : 'MKT/Planejamento/Mentoria — EXEC_ADONIAS_* nao configurada, caiu na gestora'
   }
 
   // ── 9. Fallback → Maria Helena (100%, sem hash) ───────────────────────────
