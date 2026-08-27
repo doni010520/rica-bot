@@ -10,6 +10,7 @@ import sensible from '@fastify/sensible'
 import cors from '@fastify/cors'
 import { env } from './lib/env.js'
 import { simularTurno, TELEFONE_SIMULADO } from './agent/simulador.js'
+import { responderComoHumano, quemAtende, assumirConversa, devolverParaRica } from './atendimento/humano.js'
 import { logger } from './observability/logger.js'
 import { getPool, checkDbConnection, closePool } from './lib/db.js'
 import { getMessageBuffer } from './buffer/message-buffer.js'
@@ -73,6 +74,73 @@ export async function buildApp() {
     return reply
       .code(report.overall === 'critical' ? 503 : 200)
       .send(report)
+  })
+
+  // ── /admin/responder — atendente humano responde o lead pela tela ───────
+  //
+  // Mandar mensagem pela tela É assumir a conversa: a Rica silencia neste
+  // contato até alguém devolver. Ver src/atendimento/humano.ts.
+  app.post('/admin/responder', async (request, reply) => {
+    if (env.ADMIN_TOKEN) {
+      const token = request.headers['x-admin-token']
+      if (token !== env.ADMIN_TOKEN) return reply.code(401).send({ error: 'unauthorized' })
+    }
+
+    const b = request.body as {
+      telefone?: string; texto?: string; atendente?: string; dealId?: string
+    }
+    const telefone = String(b?.telefone ?? '').replace(/\D/g, '')
+    const texto = String(b?.texto ?? '').trim()
+
+    if (!telefone || telefone.length < 10) {
+      return reply.code(400).send({ error: 'telefone inválido' })
+    }
+    if (!texto) return reply.code(400).send({ error: 'texto vazio' })
+    if (texto.length > 4000) return reply.code(400).send({ error: 'texto longo demais (máx. 4000)' })
+
+    try {
+      const r = await responderComoHumano(getPool(), {
+        telefone,
+        texto,
+        atendente: b?.atendente,
+        dealId: b?.dealId,
+      })
+      return reply.send(r)
+    } catch (err) {
+      logger.error({ err }, '/admin/responder falhou')
+      return reply.code(502).send({ error: 'falha ao enviar pelo WhatsApp' })
+    }
+  })
+
+  // ── /admin/ia — quem atende este telefone: a Rica ou uma pessoa ─────────
+  app.get('/admin/ia', async (request, reply) => {
+    if (env.ADMIN_TOKEN) {
+      const token = request.headers['x-admin-token']
+      if (token !== env.ADMIN_TOKEN) return reply.code(401).send({ error: 'unauthorized' })
+    }
+    const q = request.query as { telefone?: string }
+    const telefone = String(q?.telefone ?? '').replace(/\D/g, '')
+    if (!telefone) return reply.code(400).send({ error: 'telefone obrigatório' })
+    return reply.send(await quemAtende(getPool(), telefone))
+  })
+
+  app.post('/admin/ia', async (request, reply) => {
+    if (env.ADMIN_TOKEN) {
+      const token = request.headers['x-admin-token']
+      if (token !== env.ADMIN_TOKEN) return reply.code(401).send({ error: 'unauthorized' })
+    }
+    const b = request.body as { telefone?: string; ativar?: boolean }
+    const telefone = String(b?.telefone ?? '').replace(/\D/g, '')
+    if (!telefone) return reply.code(400).send({ error: 'telefone obrigatório' })
+
+    try {
+      if (b?.ativar) await devolverParaRica(getPool(), telefone)
+      else await assumirConversa(getPool(), telefone)
+      return reply.send(await quemAtende(getPool(), telefone))
+    } catch (err) {
+      logger.error({ err }, '/admin/ia falhou')
+      return reply.code(500).send({ error: 'falha ao alterar o atendimento' })
+    }
   })
 
   // ── /admin/simular — conversa de teste com a Rica, sem WhatsApp ─────────
