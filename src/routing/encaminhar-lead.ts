@@ -67,7 +67,7 @@ export async function encaminharLead(input: EncaminharLeadInput): Promise<Encami
   // 1. Resolve o executivo: explícito ("pro André") ou roteia por produto/região
   let exec: Executive | null = input.executivo ? resolveExecutiveByName(input.executivo) : null
   if (input.executivo && !exec) {
-    return { success: false, errorMessage: `Não reconheci o executivo "${input.executivo}". Me diz o nome certo (ex: André, Patrícia, Lúcia, Alex...).` }
+    return { success: false, errorMessage: `Não reconheci o executivo "${input.executivo}". Me diz o nome certo (ex: André, Maria Helena, Lúcia, Alex...).` }
   }
   let motivo = 'Designação manual pela equipe'
   if (!exec) {

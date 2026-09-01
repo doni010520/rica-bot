@@ -45,9 +45,19 @@ export const EXECUTIVES = {
 
 export type ExecutiveKey = keyof typeof EXECUTIVES
 
+/**
+ * Apelidos aceitos quando alguem pede o encaminhamento pelo nome ("manda pro
+ * Andre"). Quem saiu da empresa continua listado aqui de proposito: o apelido
+ * aponta para o sucessor, entao pedir "manda pra Patricia" entrega o lead ao
+ * Andre em vez de mandar para um numero que ninguem le mais.
+ *
+ *   Helen Monte  -> Maria Helena     (saiu em 27/08/2026)
+ *   Ana Clara    -> Gabriela Camara  (saiu em 27/08/2026)
+ *   Patricia     -> Andre Augusto    (saiu em 31/08/2026)
+ */
 export const EXECUTIVE_ALIASES: Record<string, ExecutiveKey> = {
-  'helen': 'HELEN',
-  'helen monte': 'HELEN',
+  'helen': 'MARIA_HELENA',
+  'helen monte': 'MARIA_HELENA',
   'maria helena': 'MARIA_HELENA',
   'maria': 'MARIA_HELENA',
   'andre': 'ANDRE',
@@ -69,13 +79,13 @@ export const EXECUTIVE_ALIASES: Record<string, ExecutiveKey> = {
   'carolina câmara': 'CAROLINA',
   'irelene': 'IRELENE',
   'irelene guerreiro': 'IRELENE',
-  'ana clara': 'ANA_CLARA',
+  'ana clara': 'GABRIELA',
   'vanessa': 'VANESSA',
   'vanessa souza': 'VANESSA',
-  'patricia': 'PATRICIA',
-  'patrícia': 'PATRICIA',
-  'patricia alves': 'PATRICIA',
-  'patrícia alves': 'PATRICIA',
+  'patricia': 'ANDRE',
+  'patrícia': 'ANDRE',
+  'patricia alves': 'ANDRE',
+  'patrícia alves': 'ANDRE',
 }
 
 /**
