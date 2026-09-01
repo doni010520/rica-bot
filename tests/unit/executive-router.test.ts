@@ -24,11 +24,18 @@ describe('routeToExecutive()', () => {
     it('autoconhecimento', () => expect(route('autoconhecimento', '5511999887766').executive.name).toBe('Lúcia Carcerere'))
   })
 
-  describe('GPS → André (RJ e MG → Patrícia)', () => {
+  // A Patrícia saiu da empresa em 31/08/2026. Ela atendia GPS de RJ e MG; a
+  // gestora pediu que esses leads passassem para o André, que já tinha o resto.
+  describe('GPS → André em todo o Brasil', () => {
     it('SP → André', () => expect(route('GPS Resultado', '5511999887766').executive.name).toBe('André Augusto'))
     it('PE → André', () => expect(route('GPS Resultado', '5581999887766').executive.name).toBe('André Augusto'))
-    it('RJ → Patrícia', () => expect(route('GPS Resultado', '5521999887766').executive.name).toBe('Patrícia Alves'))
-    it('MG → Patrícia', () => expect(route('GPS Resultado', '5531999887766').executive.name).toBe('Patrícia Alves'))
+    it('RJ → André', () => expect(route('GPS Resultado', '5521999887766').executive.name).toBe('André Augusto'))
+    it('MG → André', () => expect(route('GPS Resultado', '5531999887766').executive.name).toBe('André Augusto'))
+    it('nenhum GPS cai mais na Patrícia', () => {
+      for (const tel of ['5511999887766', '5521999887766', '5531999887766', '5581999887766', '5571999887766']) {
+        expect(route('GPS Padaria', tel).executive.name).not.toBe('Patrícia Alves')
+      }
+    })
   })
 
   describe('Alexy — catch-all nacional → Alex (sem regional)', () => {

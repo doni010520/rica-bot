@@ -11,6 +11,7 @@
  * - Eneagrama/autoconhecimento → Lúcia (prioridade 2)
  * - MKT/Planejamento/Mentoria → Maria Helena (era Helen Monte até 27/08/2026)
  * - Cafeteria → Gabriela Câmara (era Ana Clara até 27/08/2026)
+ * - GPS → André em todo o Brasil (RJ/MG iam para Patrícia até 31/08/2026)
  * - Fallback → 100% Maria Helena (sem hash 50/50 — era bug da versão anterior)
  */
 
@@ -81,15 +82,12 @@ export function routeToExecutive(
     reason = 'Eneagrama — Lúcia'
   }
 
-  // ── 3. GPS → André (RJ e MG → Patrícia) ───────────────────────────────────
+  // ── 3. GPS → André (todo o Brasil) ────────────────────────────────────────
+  // RJ e MG iam para a Patrícia até 31/08/2026; ela saiu da empresa e a gestora
+  // pediu que os leads dela, que eram de GPS, passassem para o André.
   else if (p.includes('gps')) {
-    if (state === 'RJ' || state === 'MG') {
-      executive = EXECUTIVES.PATRICIA
-      reason = 'GPS — RJ/MG (Patrícia)'
-    } else {
-      executive = EXECUTIVES.ANDRE
-      reason = 'GPS — demais regiões (André)'
-    }
+    executive = EXECUTIVES.ANDRE
+    reason = 'GPS — Brasil (André)'
   }
 
   // ── 4. ALEXY (catch-all nacional) → Alex ─────────────────────────────────
