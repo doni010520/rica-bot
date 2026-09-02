@@ -12,7 +12,7 @@
  * Roteamento por PRODUTO (mesmo princípio de TODO lead, não só GPS):
  *   - Lê as mensagens do cliente (n8n_chat_histories) e roda pelo mesmo cérebro
  *     do notificar_equipe (routeToExecutive) → executivo certo por produto/região.
- *   - Funil GPS é honrado direto (RJ/MG → Patrícia, resto André).
+ *   - Funil GPS é honrado direto (André, Brasil inteiro).
  *   - Só quem o roteador NÃO consegue identificar → triagem (Malu) no CRM.
  * Só pega leads recentes (TRANSFER_MAX_AGE_DAYS) — não varre o backlog antigo.
  */
