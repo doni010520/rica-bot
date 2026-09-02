@@ -11,6 +11,9 @@
  *   3. Worker dispara: envia WhatsApp para executivo + cópia Maria Helena
  *   4. Registra atividade no CRM (deal)
  *
+ * Quem recebe: resolvido na HORA DE ENVIAR, nao no agendamento. Um job de 24h
+ * atras pode apontar para alguem que ja saiu da empresa.
+ *
  * Dedup: jobId = exec-fu-{execPhone}-{leadPhone}
  *   → Se mesmo lead for re-encaminhado ao mesmo executivo, cancela cobrança anterior.
  */
@@ -20,7 +23,7 @@ import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { isBusinessHour } from '../lib/timezone.js'
 import { sendWhatsApp } from '../uazapi/client.js'
-import { EXECUTIVES } from '../routing/executives.config.js'
+import { EXECUTIVES, resolveExecutiveByName } from '../routing/executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
 
@@ -144,8 +147,25 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
 
   log.info('Processando cobrança de status')
 
+  // 0. Quem recebe a cobrança se decide AGORA, não no agendamento.
+  //    O job dorme 24h com o executivo congelado no payload; se a pessoa saiu
+  //    da empresa nesse meio-tempo, a cobrança cai num número que ninguém lê
+  //    mais — foi o que aconteceu com a Patrícia em 01/09/2026.
+  //    resolveExecutiveByName já aponta quem saiu para o sucessor.
+  const atual = resolveExecutiveByName(data.executiveName)
+  const destino = {
+    name: atual?.name ?? data.executiveName,
+    phone: atual?.phoneFormatted ?? data.executivePhone,
+  }
+  if (destino.phone !== data.executivePhone) {
+    log.info(
+      { de: data.executiveName, para: destino.name },
+      'Cobrança redirecionada: o executivo do agendamento saiu da empresa',
+    )
+  }
+
   // 1. Monta mensagem para o executivo
-  const firstName = data.executiveName.split(' ')[0] ?? data.executiveName
+  const firstName = destino.name.split(' ')[0] ?? destino.name
   const linkDoLead = whatsappLink(data.leadPhone)
 
   const execMessage =
@@ -160,8 +180,8 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
 
   // 2. Envia WhatsApp para o executivo
   try {
-    await sendWhatsApp(data.executivePhone, execMessage)
-    log.info({ phone: data.executivePhone.slice(-4) }, 'Cobrança enviada ao executivo')
+    await sendWhatsApp(destino.phone, execMessage)
+    log.info({ phone: destino.phone.slice(-4) }, 'Cobrança enviada ao executivo')
   } catch (err) {
     log.error({ err }, 'Falha ao enviar cobrança ao executivo')
     throw err // BullMQ faz retry
@@ -169,13 +189,13 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
 
   // 3. Envia cópia para Maria Helena (gestora)
   //    Se MH é a executiva → não duplica (mesma lógica de notificar_equipe)
-  if (data.executivePhone !== EXECUTIVES.MARIA_HELENA.phoneFormatted) {
+  if (destino.phone !== EXECUTIVES.MARIA_HELENA.phoneFormatted) {
     const mhMessage =
       `📊 *COBRANÇA DE STATUS ENVIADA*\n\n` +
       `👤 *Lead:* ${data.leadName || 'Não informado'}\n` +
       `🎯 *Interesse:* ${data.product || 'Não informado'}\n` +
       `📱 *Tel:* ${data.leadPhone}\n\n` +
-      `➡️ *Executivo cobrado:* ${data.executiveName}\n` +
+      `➡️ *Executivo cobrado:* ${destino.name}\n` +
       `📋 *Via:* ${data.assignedVia === 'designar_lead' ? 'Designação manual' : 'Roteamento automático'}\n\n` +
       `⏰ Cobrança automática ${env.EXEC_FOLLOWUP_DELAY_HOURS}h após encaminhamento`
 
@@ -194,9 +214,9 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
         method: 'POST',
         body: {
           type: 'exec_followup',
-          description: `Cobrança de status enviada para ${data.executiveName}`,
+          description: `Cobrança de status enviada para ${destino.name}`,
           metadata: {
-            executive_phone: data.executivePhone,
+            executive_phone: destino.phone,
             lead_phone: data.leadPhone,
             assigned_via: data.assignedVia,
           },
@@ -331,3 +351,6 @@ function nextBusinessDay9amBRT(from: Date): Date {
   // Fallback (nunca deve chegar aqui)
   return candidate
 }
+
+/** Exposto apenas para teste: o worker real chama isto pelo BullMQ. */
+export const __test_processExecutiveFollowup = processExecutiveFollowup
