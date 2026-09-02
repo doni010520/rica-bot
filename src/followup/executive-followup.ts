@@ -136,6 +136,30 @@ export async function closeExecutiveFollowup(): Promise<void> {
   _queue = null
 }
 
+// ─── quem recebe a cobrança ──────────────────────────────────────────────────
+
+/**
+ * Decide para quem vai a cobrança no momento do ENVIO.
+ *
+ * O job dorme 24h com o executivo congelado no payload. Se a pessoa saiu da
+ * empresa nesse meio-tempo, a cobrança cairia num número que ninguém lê mais —
+ * foi o que aconteceu com a Patrícia em 01/09/2026, um dia depois da saída.
+ * `resolveExecutiveByName` já aponta quem saiu para o sucessor.
+ *
+ * Nome desconhecido cai no que estava agendado: melhor cobrar o número antigo
+ * do que não cobrar ninguém.
+ */
+export function destinoDaCobranca(
+  nomeAgendado: string,
+  telefoneAgendado: string,
+): { name: string; phone: string } {
+  const atual = resolveExecutiveByName(nomeAgendado)
+  return {
+    name: atual?.name ?? nomeAgendado,
+    phone: atual?.phoneFormatted ?? telefoneAgendado,
+  }
+}
+
 // ─── processamento do job ────────────────────────────────────────────────────
 
 async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
@@ -152,11 +176,7 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
   //    da empresa nesse meio-tempo, a cobrança cai num número que ninguém lê
   //    mais — foi o que aconteceu com a Patrícia em 01/09/2026.
   //    resolveExecutiveByName já aponta quem saiu para o sucessor.
-  const atual = resolveExecutiveByName(data.executiveName)
-  const destino = {
-    name: atual?.name ?? data.executiveName,
-    phone: atual?.phoneFormatted ?? data.executivePhone,
-  }
+  const destino = destinoDaCobranca(data.executiveName, data.executivePhone)
   if (destino.phone !== data.executivePhone) {
     log.info(
       { de: data.executiveName, para: destino.name },
@@ -351,6 +371,3 @@ function nextBusinessDay9amBRT(from: Date): Date {
   // Fallback (nunca deve chegar aqui)
   return candidate
 }
-
-/** Exposto apenas para teste: o worker real chama isto pelo BullMQ. */
-export const __test_processExecutiveFollowup = processExecutiveFollowup
