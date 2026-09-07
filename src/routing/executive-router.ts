@@ -12,6 +12,7 @@
  * - MKT/Planejamento/Mentoria → Maria Helena (era Helen Monte até 27/08/2026)
  * - Cafeteria → Gabriela Câmara (era Ana Clara até 27/08/2026)
  * - GPS → André em todo o Brasil (RJ/MG iam para Patrícia até 31/08/2026)
+ * - Mentoria Padaria Lucrativa → André (produto novo em 07/09/2026)
  * - Fallback → 100% Maria Helena (sem hash 50/50 — era bug da versão anterior)
  */
 
@@ -96,7 +97,25 @@ export function routeToExecutive(
     reason = 'Alexy — Brasil nacional (Alex)'
   }
 
-  // ── 5. PADARIA (regional) ─────────────────────────────────────────────────
+  // ── 5. MENTORIA PADARIA LUCRATIVA → André ──────────────────────────────
+  // Precisa vir ANTES da regra de padaria: o nome do produto contém "padaria",
+  // então a regra regional pegaria primeiro e mandaria pro Alex/Gabriela/Lúcia.
+  // E antes da regra de mentoria (nº 9), que vai pra Maria Helena e é OUTRO
+  // produto — a mentoria individual de líderes, serviço id="7" do prompt.
+  // "mentoria coletiva" entra aqui porque o formato coletivo é desta mentoria;
+  // a de líderes é sempre individual.
+  else if (
+    p.includes('mentoria padaria lucrativa') ||
+    p.includes('padaria lucrativa') ||
+    p.includes('mentoria coletiva') ||
+    p.includes('mentoria para padaria') ||
+    p.includes('mentoria de panificação')
+  ) {
+    executive = EXECUTIVES.ANDRE
+    reason = 'Mentoria Padaria Lucrativa — André'
+  }
+
+  // ── 6. PADARIA (regional) ──────────────────────────────────────────────
   else if (isPadaria) {
     // MG é 'sudeste_outros' no mapa de DDD, mas padaria de MG vai pra Lúcia
     // (não pro Alex). Por isso o Sudeste do Alex exclui MG explicitamente.
@@ -115,26 +134,27 @@ export function routeToExecutive(
     }
   }
 
-  // ── 6. SUPERMERCADO → Irelene ─────────────────────────────────────────────
+  // ── 7. SUPERMERCADO → Irelene ─────────────────────────────────────────────
   else if (isSupermercado) {
     executive = EXECUTIVES.IRELENE
     reason = 'Segmento Supermercado — Irelene'
   }
 
-  // ── 7. CAFETERIA → Gabriela ───────────────────────────────────────────────
+  // ── 8. CAFETERIA → Gabriela ───────────────────────────────────────────────
   // Era Ana Clara ate 27/08/2026; ela saiu da empresa.
   else if (isCafeteria) {
     executive = EXECUTIVES.GABRIELA
     reason = 'Segmento Cafeteria — Gabriela'
   }
 
-  // ── 8. MKT / Planejamento / Mentoria → Helen ──────────────────────────────
+  // ── 9. MKT / Planejamento / Mentoria → Helen ──────────────────────────────
   else if (
     p.includes('marketing') ||
     p.includes('mkt') ||
     p.includes('planejamento estrategico') ||
     p.includes('planejamento estratégico') ||
     p.includes('planejamento comercial') ||
+    // mentoria de líderes; a Mentoria Padaria Lucrativa foi capturada na regra 5
     p.includes('mentoria')
   ) {
     // Era Helen Monte ate 27/08/2026; a pedido dela, passou a vir para a
@@ -144,7 +164,7 @@ export function routeToExecutive(
     reason = 'MKT/Planejamento/Mentoria — Maria Helena'
   }
 
-  // ── 9. Fallback → Maria Helena (100%, sem hash) ───────────────────────────
+  // ── 10. Fallback → Maria Helena (100%, sem hash) ───────────────────────────
   else {
     executive = EXECUTIVES.MARIA_HELENA
     reason = 'Outros segmentos — Maria Helena (fallback)'
