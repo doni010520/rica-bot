@@ -15,7 +15,7 @@
  * Sprint 3: adiciona notificar_equipe, designar_lead.
  */
 
-import { generateText, type CoreTool } from 'ai'
+import { generateText, type CoreMessage, type CoreTool } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import type { Pool } from 'pg'
 import { env } from '../lib/env.js'
@@ -40,6 +40,17 @@ export type RicaOutput = {
   usedFallback: boolean
   /** Número de steps (tool calls) executados */
   steps: number
+  /**
+   * true se alguma tool chegou a ser executada. Importa quando o texto vem
+   * vazio: se a tool rodou, a ação já aconteceu e NÃO se pede ao cliente que
+   * repita o que disse.
+   */
+  ranTool: boolean
+}
+
+/** Alguma tool chegou a ser chamada em algum passo? Exportado para teste. */
+export function houveToolCall(r: Awaited<ReturnType<typeof generateText>>): boolean {
+  return (r.steps ?? []).some((passo) => (passo.toolCalls ?? []).length > 0)
 }
 
 // ─── agent principal ──────────────────────────────────────────────────────────
@@ -73,32 +84,65 @@ export async function runRica(input: RicaInput, pool: Pool): Promise<RicaOutput>
   // 3. Chama o LLM
   const hasTools = Object.keys(tools).length > 0
 
-  let result: Awaited<ReturnType<typeof generateText>>
+  const baseMessages: CoreMessage[] = [
+    ...previousMessages,
+    { role: 'user', content: userMessage },
+  ]
 
-  try {
-    result = await generateText({
+  const chamar = (messages: CoreMessage[]) =>
+    generateText({
       model: openai(env.OPENAI_MODEL),
       temperature: env.OPENAI_TEMPERATURE,
       system: systemPrompt,
-      messages: [
-        ...previousMessages,
-        { role: 'user', content: userMessage },
-      ],
+      messages,
       // Tools habilitadas apenas quando fornecidas (Sprint 2+)
       ...(hasTools ? { tools, maxSteps: 10 } : {}),
     })
+
+  let result: Awaited<ReturnType<typeof generateText>>
+
+  try {
+    result = await chamar(baseMessages)
   } catch (err) {
     log.error({ err }, 'Erro no generateText — retornando fallback')
-    return { text: '', usedFallback: true, steps: 0 }
+    return { text: '', usedFallback: true, steps: 0, ranTool: false }
   }
 
-  const rawText = result.text?.trim() ?? ''
-  const stepCount = result.steps?.length ?? 0
+  let rawText = result.text?.trim() ?? ''
+  let stepCount = result.steps?.length ?? 0
+  let ranTool = houveToolCall(result)
 
-  // 4. Valida resposta vazia (replica: If pós-Edit Fields2 do n8n)
+  // 4. Texto vazio: tenta UMA vez antes de desistir.
+  //    A resposta vazia é intermitente — foram 5 casos desde 31/08, e em 3 deles
+  //    o cliente recebeu "pode repetir?" e sumiu da conversa. Quase sempre logo
+  //    depois de ele responder uma palavra só (o próprio nome, ou "sim").
+  //
+  //    Se alguma tool já rodou, a retentativa CONTINUA de onde parou: manda de
+  //    volta as mensagens da primeira tentativa, com os resultados das tools.
+  //    Refazer o turno do zero faria a tool rodar duas vezes — encaminharia o
+  //    mesmo lead duas vezes, por exemplo.
   if (!rawText) {
-    log.warn({ stepCount }, 'Agent retornou resposta vazia')
-    return { text: '', usedFallback: true, steps: stepCount }
+    log.warn({ stepCount, ranTool }, 'Agent retornou resposta vazia — tentando de novo')
+    const continuacao: CoreMessage[] = ranTool
+      ? [...baseMessages, ...(result.response?.messages ?? [])]
+      : baseMessages
+    try {
+      const segunda = await chamar(continuacao)
+      const textoDaSegunda = segunda.text?.trim() ?? ''
+      if (textoDaSegunda) {
+        rawText = textoDaSegunda
+        stepCount += segunda.steps?.length ?? 0
+        ranTool = ranTool || houveToolCall(segunda)
+        log.info({ stepCount }, 'Segunda tentativa respondeu')
+      }
+    } catch (err) {
+      log.error({ err }, 'Segunda tentativa também falhou')
+    }
+  }
+
+  if (!rawText) {
+    log.warn({ stepCount, ranTool }, 'Agent retornou vazio nas duas tentativas')
+    return { text: '', usedFallback: true, steps: stepCount, ranTool }
   }
 
   log.info({ textLen: rawText.length, stepCount }, 'Agent respondeu')
@@ -106,5 +150,5 @@ export async function runRica(input: RicaInput, pool: Pool): Promise<RicaOutput>
   // 5. Salva turno na memória
   await saveChatTurn(pool, phone, userMessage, rawText)
 
-  return { text: rawText, usedFallback: false, steps: stepCount }
+  return { text: rawText, usedFallback: false, steps: stepCount, ranTool }
 }

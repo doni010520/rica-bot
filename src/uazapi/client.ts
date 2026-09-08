@@ -207,6 +207,21 @@ export async function sendFallbackMessage(phone: string, dealId?: string): Promi
   logger.warn({ phone: phone.slice(-4) }, 'Fallback message enviado')
 }
 
+/**
+ * Usada quando o modelo nao devolveu texto MAS alguma tool ja rodou.
+ *
+ * Nao pede pro cliente repetir: a acao aconteceu, so a frase de resposta que
+ * nao veio. Pedir repeticao ali faz a pessoa achar que nada foi feito.
+ */
+export async function sendAcaoConcluidaMessage(phone: string, dealId?: string): Promise<void> {
+  await sendWhatsApp(
+    phone,
+    'Perfeito, já registrei aqui! Em instantes alguém da nossa equipe te chama. 😊',
+    { crmSender: 'system_fallback', dealId },
+  )
+  logger.warn({ phone: phone.slice(-4) }, 'Mensagem de ação concluída enviada (texto do modelo veio vazio)')
+}
+
 export async function sendMemoryClearedMessage(phone: string): Promise<void> {
   await sendWhatsApp(phone, 'Memória limpa! podemos começar do zero.', {
     crmSender: 'system_comando',

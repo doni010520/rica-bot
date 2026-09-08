@@ -13,6 +13,7 @@
  * - Cafeteria → Gabriela Câmara (era Ana Clara até 27/08/2026)
  * - GPS → André em todo o Brasil (RJ/MG iam para Patrícia até 31/08/2026)
  * - Mentoria Padaria Lucrativa → André (produto novo em 07/09/2026)
+ * - JDL Online → André (antes caía no fallback da Maria Helena)
  * - Fallback → 100% Maria Helena (sem hash 50/50 — era bug da versão anterior)
  */
 
@@ -115,7 +116,24 @@ export function routeToExecutive(
     reason = 'Mentoria Padaria Lucrativa — André'
   }
 
-  // ── 6. PADARIA (regional) ──────────────────────────────────────────────
+  // ── 6. JDL ONLINE → André ──────────────────────────────────────────────
+  // 07/09/2026: um lead de "JDL Online" não casava com regra nenhuma e caiu no
+  // fallback, indo parar na Maria Helena. O prompt manda a Rica vender direto
+  // (mandar o link) e, quando precisa transferir, usar designar_lead com o
+  // André — mas se ela errar a ferramenta, o lead tem que chegar no lugar certo
+  // mesmo assim. Vem antes da regra de padaria porque a conversa de um lead de
+  // JDL quase sempre fala de padaria, e a regra regional pegaria primeiro.
+  else if (
+    p.includes('jdl') ||
+    p.includes('jornada da lucratividade') ||
+    p.includes('jornada de lucratividade') ||
+    p.includes('jornada online')
+  ) {
+    executive = EXECUTIVES.ANDRE
+    reason = 'JDL Online — André'
+  }
+
+  // ── 7. PADARIA (regional) ──────────────────────────────────────────────
   else if (isPadaria) {
     // MG é 'sudeste_outros' no mapa de DDD, mas padaria de MG vai pra Lúcia
     // (não pro Alex). Por isso o Sudeste do Alex exclui MG explicitamente.
@@ -134,20 +152,20 @@ export function routeToExecutive(
     }
   }
 
-  // ── 7. SUPERMERCADO → Irelene ─────────────────────────────────────────────
+  // ── 8. SUPERMERCADO → Irelene ─────────────────────────────────────────────
   else if (isSupermercado) {
     executive = EXECUTIVES.IRELENE
     reason = 'Segmento Supermercado — Irelene'
   }
 
-  // ── 8. CAFETERIA → Gabriela ───────────────────────────────────────────────
+  // ── 9. CAFETERIA → Gabriela ───────────────────────────────────────────────
   // Era Ana Clara ate 27/08/2026; ela saiu da empresa.
   else if (isCafeteria) {
     executive = EXECUTIVES.GABRIELA
     reason = 'Segmento Cafeteria — Gabriela'
   }
 
-  // ── 9. MKT / Planejamento / Mentoria → Helen ──────────────────────────────
+  // ── 10. MKT / Planejamento / Mentoria → Helen ──────────────────────────────
   else if (
     p.includes('marketing') ||
     p.includes('mkt') ||
@@ -164,7 +182,7 @@ export function routeToExecutive(
     reason = 'MKT/Planejamento/Mentoria — Maria Helena'
   }
 
-  // ── 10. Fallback → Maria Helena (100%, sem hash) ───────────────────────────
+  // ── 11. Fallback → Maria Helena (100%, sem hash) ───────────────────────────
   else {
     executive = EXECUTIVES.MARIA_HELENA
     reason = 'Outros segmentos — Maria Helena (fallback)'

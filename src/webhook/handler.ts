@@ -33,6 +33,7 @@ import {
   sendWhatsApp,
   sendWhatsAppChunked,
   sendFallbackMessage,
+  sendAcaoConcluidaMessage,
   sendMemoryClearedMessage,
 } from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
@@ -232,8 +233,17 @@ export async function handleBufferedMessage(
   const result = await runRica({ phone, displayName: crm.contactName ?? '', userMessage: combinedText, crm, tools }, deps.pool)
 
   if (result.usedFallback || !result.text) {
-    await sendFallbackMessage(phone, crm.dealId)
-    log.warn('Fallback enviado')
+    // O texto veio vazio mesmo depois da segunda tentativa. A mensagem depende
+    // do que aconteceu antes: se alguma tool rodou, a ação JÁ foi feita (o lead
+    // foi encaminhado, o dado foi salvo) e pedir pro cliente repetir e mentira
+    // que confunde — foi o que esvaziou a conversa do JDL em 07/09.
+    if (result.ranTool) {
+      await sendAcaoConcluidaMessage(phone, crm.dealId)
+      log.warn({ steps: result.steps }, 'Texto vazio, mas a tool rodou — avisou sem pedir repetição')
+    } else {
+      await sendFallbackMessage(phone, crm.dealId)
+      log.warn('Fallback enviado')
+    }
     return
   }
 
