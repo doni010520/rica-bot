@@ -15,6 +15,7 @@ import { buildOperationalTools } from './operations/definitions.js'
 import { buildNotificarEquipeTool } from './operations/notificar-equipe.js'
 import { buildDesignarLeadTool } from './operations/designar-lead.js'
 import { buscar_documentos } from './rag/buscar-documentos.js'
+import { blindarTools } from './blindagem.js'
 import {
   enviar_apresentacao,
   masterclass,
@@ -25,7 +26,9 @@ import {
 export type AllTools = ReturnType<typeof buildAllTools>
 
 export function buildAllTools(phone: string, pool: Pool) {
-  return {
+  // Blindadas: tool que falha devolve "não deu" ao modelo em vez de derrubar a
+  // conversa com o cliente (ver blindagem.ts).
+  return blindarTools({
     ...buildCrmTools(phone),
     ...buildOperationalTools(phone, pool),
     notificar_equipe: buildNotificarEquipeTool(phone),
@@ -35,5 +38,5 @@ export function buildAllTools(phone: string, pool: Pool) {
     masterclass,
     processar_transcricao,
     notificar_andre: buildNotificarAndreTool(phone),
-  }
+  }, phone)
 }

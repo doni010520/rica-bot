@@ -22,6 +22,7 @@ import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { buildSystemPrompt, type CrmContext } from './prompt.js'
 import { loadChatHistory, saveChatTurn, historyToMessages } from '../memory/postgres-chat.js'
+import { repararChamadaDeTool } from '../tools/blindagem.js'
 
 // ─── tipos ────────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,9 @@ export async function runRica(input: RicaInput, pool: Pool): Promise<RicaOutput>
       system: systemPrompt,
       messages,
       // Tools habilitadas apenas quando fornecidas (Sprint 2+)
-      ...(hasTools ? { tools, maxSteps: 10 } : {}),
+      // Campo com nome errado (ex.: `name` em vez de `nome`) é corrigido em vez de
+      // lançar InvalidToolArgumentsError e mandar "pode repetir?" ao cliente.
+      ...(hasTools ? { tools, maxSteps: 10, experimental_repairToolCall: repararChamadaDeTool } : {}),
     })
 
   let result: Awaited<ReturnType<typeof generateText>>
