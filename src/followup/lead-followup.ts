@@ -38,23 +38,50 @@ import { isTeamPhone } from '../routing/executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { calculateBusinessHourDelayMs } from './executive-followup.js'
+import { funilAtual, naoContatar, atualizarFunil, type Campanha } from '../funil/funil.js'
 
 // ─── config ──────────────────────────────────────────────────────────────────
 
 const QUEUE_NAME = 'rica-lead-followup'
 
-/** Delays (horas) por toque. Ex: [2, 24, 72] = +2h, depois +24h, depois +72h. */
-const TOUCH_DELAYS_H = env.LEAD_FOLLOWUP_DELAYS_HOURS
-  .split(',')
-  .map((s) => Number(s.trim()))
-  .filter((n) => Number.isFinite(n) && n > 0)
+function parseHoras(raw: string): number[] {
+  return raw
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0)
+}
 
-/** Nº máximo de toques = tamanho da régua. */
-const MAX_TOUCHES = TOUCH_DELAYS_H.length
+/** Delays (horas) por toque. Ex: [2, 24, 72] = +2h, depois +24h, depois +72h. */
+const TOUCH_DELAYS_H = parseHoras(env.LEAD_FOLLOWUP_DELAYS_HOURS)
+
+/**
+ * Régua por campanha. Os documentos da força-tarefa (set/2026) definem:
+ *   Mentoria: 30-60 min, D+1, D+2, D+3, D+5, D+7 — marcos contados a partir do
+ *             1º silêncio; aqui viram INTERVALOS entre um toque e o seguinte.
+ *   Jornada:  uma única retomada ~3h depois da última mensagem da Rica.
+ * Mentoria e Jornada usam horas CORRIDAS (a régua fala em dias); a padrão
+ * continua em horário comercial.
+ */
+const REGUA: Record<string, { horas: number[]; corridas: boolean }> = {
+  mentoria: { horas: intervalos(parseHoras(env.MENTORIA_FOLLOWUP_HORAS)), corridas: true },
+  jdl: { horas: parseHoras(env.JDL_FOLLOWUP_HORAS), corridas: true },
+  padrao: { horas: TOUCH_DELAYS_H, corridas: false },
+}
+
+/** [0.75, 24, 48] (marcos desde o 1º silêncio) → [0.75, 23.25, 24] (intervalos). */
+function intervalos(marcos: number[]): number[] {
+  return marcos.map((h, i) => (i === 0 ? h : Math.max(0.25, h - (marcos[i - 1] ?? 0))))
+}
+
+function reguaDa(campanha: string | undefined): { horas: number[]; corridas: boolean } {
+  return REGUA[campanha ?? ''] ?? { horas: TOUCH_DELAYS_H, corridas: false }
+}
 
 export type LeadFollowupData = {
   phone: string       // com 55 (formato uazapi/normalizado)
   attempt: number     // 1-based
+  /** Campanha que definiu a régua (mentoria | jdl | padrao). */
+  campanha?: string | undefined
 }
 
 // ─── infra BullMQ ────────────────────────────────────────────────────────────
@@ -94,23 +121,37 @@ function jobIdFor(phone: string): string {
  * Chamado pela Rica após responder um lead (attempt=1) e pelo próprio worker
  * após cada toque (attempt+1). Upsert: cancela o toque pendente e agenda o novo.
  */
-export async function scheduleLeadFollowup(phone: string, attempt = 1): Promise<void> {
+export async function scheduleLeadFollowup(
+  phone: string,
+  attempt = 1,
+  pool?: Pool,
+  campanhaJaConhecida?: string,
+): Promise<void> {
   if (!env.LEAD_FOLLOWUP_ENABLED) return
-  if (attempt < 1 || attempt > MAX_TOUCHES) return
 
-  const hours = TOUCH_DELAYS_H[attempt - 1]
+  // A campanha define a régua. Quem pediu para não ser contatado não entra.
+  let campanha = campanhaJaConhecida
+  if (!campanha && pool) {
+    if (await naoContatar(pool, phone)) return
+    const f = await funilAtual(pool, phone)
+    campanha = f && (f.campanha === 'mentoria' || f.campanha === 'jdl') ? f.campanha : 'padrao'
+  }
+  const regua = reguaDa(campanha)
+  if (attempt < 1 || attempt > regua.horas.length) return
+
+  const hours = regua.horas[attempt - 1]
   if (hours === undefined) return
 
   const queue = getQueue()
   const jobId = jobIdFor(phone)
-  const delayMs = calculateBusinessHourDelayMs(hours)
+  const delayMs = regua.corridas ? Math.round(hours * 3_600_000) : calculateBusinessHourDelayMs(hours)
 
   await queue.remove(jobId).catch(() => null)
-  await queue.add('touch', { phone, attempt } satisfies LeadFollowupData, { jobId, delay: delayMs })
+  await queue.add('touch', { phone, attempt, campanha } satisfies LeadFollowupData, { jobId, delay: delayMs })
 
   logger.child({ context: 'lead-followup' }).info(
-    { phone: phone.slice(-4), attempt, delayH: (delayMs / 3_600_000).toFixed(1) },
-    `📨 Follow-up de lead agendado (toque ${attempt}/${MAX_TOUCHES})`,
+    { phone: phone.slice(-4), attempt, campanha, delayH: (delayMs / 3_600_000).toFixed(1) },
+    `📨 Follow-up de lead agendado (toque ${attempt}/${regua.horas.length})`,
   )
 }
 
@@ -148,7 +189,7 @@ export function startLeadFollowupWorker(pool: Pool): Worker | null {
   })
 
   logger.info(
-    { touches: MAX_TOUCHES, delaysH: TOUCH_DELAYS_H.join(',') },
+    { padrao: TOUCH_DELAYS_H.join(','), mentoria: env.MENTORIA_FOLLOWUP_HORAS, jdl: env.JDL_FOLLOWUP_HORAS },
     '📨 Lead followup worker (agendador rica-bot) iniciado',
   )
   return _worker
@@ -165,7 +206,15 @@ export async function closeLeadFollowup(): Promise<void> {
 
 async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<void> {
   const { phone, attempt } = data
+  const campanha = data.campanha ?? 'padrao'
+  const regua = reguaDa(campanha)
   const log = followupLogger(phone.slice(-4))
+
+  // Pediu para não receber mais mensagens → nunca cobra.
+  if (await naoContatar(pool, phone)) {
+    log.info('lead-followup: lead pediu para não ser contatado — parando régua')
+    return
+  }
 
   // 0. Executivo do time NUNCA recebe follow-up de lead (a Rica cobraria o
   //    próprio time). Vale também pra toques agendados antes desta proteção.
@@ -209,7 +258,11 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
   }
 
   // 4. Gera a mensagem do toque com a LLM (baseada na última msg + histórico).
-  const text = await generateLeadFollowupMessage(historyToMessages(history), attempt)
+  const funil = campanha === 'padrao' ? null : await funilAtual(pool, phone)
+  const text = await generateLeadFollowupMessage(historyToMessages(history), attempt, campanha, {
+    linkEnviado: Boolean(funil?.link_enviado_at),
+    dor: funil?.dor_principal ?? '',
+  })
   if (!text.trim()) {
     log.warn('lead-followup: LLM retornou vazio — skip')
     return
@@ -218,11 +271,23 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
   // 5. Envia. O logOutbound cuida do registro em rica_mensagens_enviadas e,
   //    por ser um LEAD, espelha o toque em deal_messages (thread do CRM).
   await sendWhatsApp(phone, text, { crmSender: 'system_followup', dealId: lead.dealId })
-  log.info({ attempt, touches: MAX_TOUCHES }, `✅ Follow-up de lead enviado (toque ${attempt})`)
+  log.info({ attempt, touches: regua.horas.length, campanha }, `✅ Follow-up de lead enviado (toque ${attempt})`)
+  if (campanha !== 'padrao') {
+    await pool.query(
+      `UPDATE rica_lead_funil SET followup_step_reached = GREATEST(followup_step_reached, $4)
+       WHERE organization_id = $1 AND phone = $2 AND campanha = $3`,
+      [env.ORG_ID, phone.replace(/\D/g, ''), campanha, attempt],
+    ).catch(() => {})
+  }
 
   // 6. Agenda o próximo toque (se ainda houver).
-  if (attempt < MAX_TOUCHES) {
-    await scheduleLeadFollowup(phone, attempt + 1)
+  if (attempt < regua.horas.length) {
+    await scheduleLeadFollowup(phone, attempt + 1, pool, campanha)
+  } else if (campanha === 'mentoria' || campanha === 'jdl') {
+    // A especificação da Mentoria proíbe "encerrar como perdido apenas porque não
+    // respondeu": o lead vai para NUTRIÇÃO (e a Jornada pode entrar no resgate).
+    log.info('lead-followup: régua da campanha esgotada — lead vai para nutrição')
+    await atualizarFunil(pool, phone, campanha as Campanha, { etapa: 'nutricao', evento: 'followup_esgotado' })
   } else {
     log.info('lead-followup: última régua enviada — encerrando cobrança deste lead')
     // 7. Régua esgotada sem resposta → fecha o deal como perdido no CRM.
@@ -307,15 +372,52 @@ REGRAS:
 6. Não ofereça produtos suspensos nem foge do que a pessoa demonstrou interesse.
 7. SAÍDA: só o texto da mensagem, sem aspas, sem prefácio.`
 
+/**
+ * Mensagens-base das réguas de campanha (documentos da força-tarefa, set/2026).
+ * A LLM adapta ao histórico, mas mantém a intenção de cada toque.
+ */
+const BASE_MENTORIA: Record<number, string> = {
+  1: 'Reduzir esforço. Base: "Fiquei por aqui 😊 Me diz só uma coisa: hoje sua prioridade é mais venda, lucro ou produção?"',
+  2: 'Gerar identificação. Base: "Muitos empresários chegam dizendo: a padaria vende, mas o dinheiro não fica. Isso acontece por aí também ou seu desafio é outro?"',
+  3: 'Provocar diagnóstico. Base: "Hoje você sabe exatamente quais produtos mais deixam dinheiro e quais só geram faturamento?"',
+  4: 'Conectar solução. Base: "Na Mentoria conectamos resultado, CMV, produção e operação. Qual dessas áreas mais precisa de atenção hoje?"',
+  5: 'Qualificar timing. Base: "Melhorar a gestão é prioridade para agora ou algo que você está pesquisando para mais adiante?"',
+  6: 'Fechar ciclo com porta aberta. Base: "Não quero ficar te mandando mensagens sem saber se este é o momento. Se pudesse resolver um único problema da sua padaria hoje, qual seria? Se quiser responder depois, continuo exatamente daqui."',
+}
+
+function instrucaoDaCampanha(
+  campanha: string,
+  attempt: number,
+  ctx: { linkEnviado: boolean; dor: string },
+): string {
+  if (campanha === 'mentoria') {
+    const base = BASE_MENTORIA[attempt] ?? BASE_MENTORIA[6]
+    return `CAMPANHA: Mentoria Padaria Lucrativa. Toque ${attempt} de 6. Objetivo deste toque: ${base}` +
+      (ctx.dor ? ` Se fizer sentido, conecte com a dor que o lead já contou ("${ctx.dor}") em vez da hipótese genérica.` : '') +
+      ' Se a conversa já tinha chegado ao convite para a reunião com o André, retome esse convite (reunião rápida de 30 minutos).'
+  }
+  if (campanha === 'jdl') {
+    return ctx.linkEnviado
+      ? 'CAMPANHA: Jornada da Lucratividade Online. O link de compra JÁ foi enviado e não houve compra. Faça UMA verificação contextualizada, base: "Conseguiu abrir o link? Se ficou alguma dúvida sobre as aulas, o acesso ou o pagamento, eu te ajudo por aqui." NÃO diga que viu o checkout.'
+      : 'CAMPANHA: Jornada da Lucratividade Online. Retomada curta, base: "Posso facilitar sua escolha: você quer que eu te mostre como a Jornada pode ajudar na sua padaria ou prefere receber logo o programa e o valor?"'
+  }
+  return ''
+}
+
 async function generateLeadFollowupMessage(
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
   attempt: number,
+  campanha = 'padrao',
+  ctx: { linkEnviado: boolean; dor: string } = { linkEnviado: false, dor: '' },
 ): Promise<string> {
+  const extra = instrucaoDaCampanha(campanha, attempt, ctx)
   try {
     const result = await generateText({
       model: openai(env.OPENAI_MODEL),
       temperature: 0.7,
-      system: SYSTEM_PROMPT,
+      system: extra
+        ? `${SYSTEM_PROMPT}\n\n${extra}\nNão invente urgência, vagas, datas ou ganho garantido. Mensagem de até 350 caracteres.`
+        : SYSTEM_PROMPT,
       messages: [
         ...history.slice(-12),
         { role: 'user', content: `[Instrução interna: gere a mensagem do toque ${attempt} de follow-up, retomando a conversa a partir da última mensagem do cliente. Só o texto.]` },

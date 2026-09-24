@@ -22,6 +22,8 @@ export type CrmContext = {
   companyName?: string | undefined
   dealId?: string | undefined
   openDeals?: string | undefined
+  /** Bloco <funil_do_lead> (campanha/etapa/diagnóstico já coletado). */
+  funil?: string | undefined
   phone: string
 }
 
@@ -95,8 +97,10 @@ function buildCrmBlock(crm: CrmContext): string {
     e responde ao cliente imediatamente.
     REGRA DO NOME: Se CONTACT_NAME estiver vazio ou "(desconhecido)", NUNCA
     use o número de telefone como nome. Cumprimente SEM nome (ex: "Oi! 😊")
-    e, com naturalidade, pergunte como pode chamar a pessoa.
-</crm_pre_carregado>`
+    e, com naturalidade, pergunte como pode chamar a pessoa — EXCETO nas
+    campanhas Mentoria e Jornada: lá o nome só é pedido depois do diagnóstico.
+</crm_pre_carregado>${crm.funil ? `
+${crm.funil}` : ''}`
 }
 
 function readPromptFile(filename: string): string | null {

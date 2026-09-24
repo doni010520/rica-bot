@@ -166,6 +166,34 @@ const EnvSchema = z.object({
   // Sem valor, só os executivos (EXEC_*_PHONE) ficam protegidos.
   TEAM_PHONES: z.string().optional().default(''),
 
+  // ── Campanhas comerciais (força-tarefa set/2026) ─────────────────────────
+  // Jornada Online — suporte: quem recebe aviso de ACESSO e de REEMBOLSO.
+  // Nomes e telefones "Nome:55DDDNUMERO" separados por vírgula. Entram também
+  // na rede de segurança do time (nunca viram lead).
+  JDL_ACESSO_CONTATOS: z.string().default('Jéssica:5581999880892,Hugo:5581995251921'),
+  JDL_REEMBOLSO_CONTATOS: z.string().default('Jéssica:5581999880892,Maria Helena:558199736503'),
+  // Lembrete de pendência aberta: de quantas em quantas horas úteis cobrar.
+  PENDENCIA_LEMBRETE_HORAS: intStr(4),
+  PENDENCIA_CRON: z.string().default('0 9-18 * * 1-6'),
+
+  // Quem recebe o painel semanal do funil (Isabell, Jéssica, Maria Helena).
+  FUNIL_SEMANAL_CONTATOS: z.string().default('5581996768469,5581999880892,558199736503'),
+  FUNIL_SEMANAL_CRON: z.string().default('0 8 * * 1'),
+
+  // Mentoria — agenda do André (Google Agenda conectado no CRM).
+  AGENDA_TIMEZONE: z.string().default('America/Recife'),
+  // Cadência da Mentoria sem resposta: 45min, D+1, D+2, D+3, D+5, D+7 (horas corridas).
+  MENTORIA_FOLLOWUP_HORAS: z.string().default('0.75,24,48,72,120,168'),
+  // Cadência da Jornada sem resposta: 1 retomada 3h depois.
+  JDL_FOLLOWUP_HORAS: z.string().default('3'),
+
+  // Resgate de leads antigos da Jornada — DESLIGADO por padrão (risco de
+  // bloqueio do número). Ligar com RESGATE_ENABLED=true.
+  RESGATE_ENABLED: z.string().optional().default('false').transform((v) => v === 'true'),
+  RESGATE_CRON: z.string().default('0 10 * * 1-5'),
+  RESGATE_LOTE_DIARIO: intStr(15),
+  RESGATE_INTERVALO_DIAS: z.string().default('3,5'),
+
   // Patrícia — recebe GPS de RJ/MG. Opcional com default (configurável no EasyPanel).
   EXEC_PATRICIA_PHONE:     z.string().regex(/^55\d{10,11}$/).default('5521979937174'),
   EXEC_PATRICIA_EMAIL:     z.string().email().default('patricia@sucessonoresultado.com.br'),

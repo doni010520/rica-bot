@@ -23,6 +23,7 @@ import { logger } from '../observability/logger.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { EXECUTIVES } from '../routing/executives.config.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
+import { pendenciasDoDia } from '../funil/pendencias.js'
 
 const MAX_LIST = 12 // máximo de itens por lista no WhatsApp
 
@@ -208,6 +209,23 @@ function formatDigest(d: DigestData, tip = ''): string {
   return linhas.join('\n')
 }
 
+/**
+ * Ocorrências de suporte da Jornada Online (acesso/reembolso) — pedido do
+ * "Fluxo Rica - JDL On-line": relatório diário para a Maria Helena.
+ */
+function formatPendencias(p: Awaited<ReturnType<typeof pendenciasDoDia>>): string {
+  if (p.abertasHoje === 0 && p.resolvidasHoje === 0 && p.emAberto.length === 0) return ''
+  const l: string[] = ['', '━━━━━━━━━━━━', '🎓 *Jornada Online — ocorrências de suporte*']
+  l.push(`Abertas hoje: *${p.abertasHoje}* · Resolvidas hoje: *${p.resolvidasHoje}*`)
+  if (p.emAberto.length) {
+    l.push('*Ainda em aberto:*')
+    for (const x of p.emAberto.slice(0, MAX_LIST)) {
+      l.push(`• #${x.codigo} ${x.tipo}${x.nome ? ` — ${x.nome}` : ''} (há ${x.horas}h)`)
+    }
+  }
+  return l.join('\n')
+}
+
 // ─── execução ───────────────────────────────────────────────────────────────────
 
 export async function runDailyDigest(pool: Pool): Promise<void> {
@@ -215,7 +233,7 @@ export async function runDailyDigest(pool: Pool): Promise<void> {
   try {
     const data = await collectDigest(pool)
     const tip = await generateDailyTip(data)
-    const message = formatDigest(data, tip)
+    const message = formatDigest(data, tip) + formatPendencias(await pendenciasDoDia(pool))
     await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, message)
     log.info(
       { leadsNovos: data.leadsNovos, distribuidos: data.distribuidos.length, semDono: data.semDono.length },

@@ -20,6 +20,9 @@ import { startLeadFollowupWorker, closeLeadFollowup } from './followup/lead-foll
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
 import { startWeeklyInsightsWorker, stopWeeklyInsightsWorker } from './reports/weekly-insights.js'
 import { startStaleTransferWorker, stopStaleTransferWorker } from './routing/transfer-stale.js'
+import { startPendenciasWorker, stopPendenciasWorker } from './funil/pendencias.js'
+import { startResgateWorker, stopResgateWorker } from './funil/resgate.js'
+import { startFunilSemanalWorker, stopFunilSemanalWorker } from './reports/funil-semanal.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
 import { logBuffer } from './observability/log-buffer.js'
@@ -298,6 +301,9 @@ async function main() {
     startDailyDigestWorker(getPool())
     startWeeklyInsightsWorker(getPool())
     startStaleTransferWorker(getPool())
+    startPendenciasWorker(getPool())
+    startResgateWorker(getPool())
+    startFunilSemanalWorker(getPool())
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
@@ -324,6 +330,9 @@ async function main() {
       stopDailyDigestWorker()
       stopWeeklyInsightsWorker()
       stopStaleTransferWorker()
+      stopPendenciasWorker()
+      stopResgateWorker()
+      stopFunilSemanalWorker()
       await closeExecutiveFollowup()
       await closeLeadFollowup()
       if (app) await app.close()

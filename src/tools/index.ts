@@ -16,6 +16,7 @@ import { buildNotificarEquipeTool } from './operations/notificar-equipe.js'
 import { buildDesignarLeadTool } from './operations/designar-lead.js'
 import { buscar_documentos } from './rag/buscar-documentos.js'
 import { blindarTools } from './blindagem.js'
+import { buildCampanhasTools } from './operations/campanhas.js'
 import {
   enviar_apresentacao,
   masterclass,
@@ -38,5 +39,7 @@ export function buildAllTools(phone: string, pool: Pool) {
     masterclass,
     processar_transcricao,
     notificar_andre: buildNotificarAndreTool(phone),
+    // Campanhas (Mentoria com agenda do André, Jornada Online, funil e opt-out)
+    ...buildCampanhasTools(phone, pool),
   }, phone)
 }

@@ -38,6 +38,8 @@ import {
 } from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
 import { isTeamPhone } from '../routing/executives.config.js'
+import { aoReceberDoLead, aoResponderLead, funilAtual, blocoFunilParaPrompt } from '../funil/funil.js'
+import { tryResolverPendencia } from '../funil/pendencias.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
 
@@ -158,6 +160,13 @@ export async function handleBufferedMessage(
     return
   }
 
+  // 0.05 PENDÊNCIA DA JORNADA: alguém do suporte (Jéssica, Hugo, Maria Helena)
+  //      escreveu "resolvido 12" — fecha a pendência e para os lembretes.
+  if (await tryResolverPendencia(deps.pool, phone, combinedText)) {
+    log.info('Pendência marcada como resolvida')
+    return
+  }
+
   // 0.1 COPILOTO: se o telefone for de um membro do time, responde com dados do
   //     CRM (relatórios, leads) em vez de tratar como lead. Senão, segue normal.
   //     Memória curta: passa o histórico recente pro copiloto (ex: lead numa msg,
@@ -206,6 +215,11 @@ export async function handleBufferedMessage(
   // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
   //    Passa a 1a mensagem para detectar o funil (ex: GPS nasce no funil GPS)
   const crm = await preFetchCrm(phone, '', combinedText)
+
+  // 1.1 Funil da campanha: reconhece o anúncio (Mentoria/Jornada/GPS), marca
+  //     que o lead respondeu e injeta no prompt a etapa + o que já foi coletado.
+  await aoReceberDoLead(deps.pool, phone, combinedText, crm.dealId)
+  crm.funil = blocoFunilParaPrompt(await funilAtual(deps.pool, phone))
 
   // 2. Salvar mensagem do cliente (direction=in) — fire-and-forget
   saveMessage({
@@ -256,8 +270,11 @@ export async function handleBufferedMessage(
   })
   log.info({ chunks: result.text.split('\n\n').filter(Boolean).length }, 'Resposta enviada')
 
+  void aoResponderLead(deps.pool, phone)
+
   // 6. Agenda follow-up inteligente (toque 1). Cancelado se o lead responder.
-  void scheduleLeadFollowup(phone, 1)
+  //    A cadência depende da campanha (Mentoria, Jornada ou padrão).
+  void scheduleLeadFollowup(phone, 1, deps.pool)
 }
 
 // ─── fromMe handler ───────────────────────────────────────────────────────────

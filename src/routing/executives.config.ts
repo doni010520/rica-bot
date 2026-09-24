@@ -115,11 +115,30 @@ function phoneKey(phone: string): string {
  * Adonias...) + o dev que recebe as aprovações (APPROVAL_FORWARD_PHONE, incluído
  * aqui para não depender de alguém lembrar de repeti-lo em TEAM_PHONES).
  */
+/** "Jéssica:5581...,Hugo:5581..." → [{ nome, phone }]. Aceita só o número também. */
+export function parseContatos(raw: string): Array<{ nome: string; phone: string }> {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((item) => {
+      const i = item.lastIndexOf(':')
+      const nome = i > 0 ? item.slice(0, i).trim() : ''
+      const phone = (i > 0 ? item.slice(i + 1) : item).replace(/\D/g, '')
+      return { nome, phone }
+    })
+    .filter((c) => c.phone.length >= 12)
+}
+
 const TEAM_PHONE_KEYS = new Set(
   [
     ...Object.values(EXECUTIVES).map((e) => e.phoneFormatted),
     ...env.TEAM_PHONES.split(',').map((s) => s.trim()),
     env.APPROVAL_FORWARD_PHONE,
+    // Suporte da Jornada e destinatários do painel (Jéssica, Hugo, Isabell).
+    ...parseContatos(env.JDL_ACESSO_CONTATOS).map((c) => c.phone),
+    ...parseContatos(env.JDL_REEMBOLSO_CONTATOS).map((c) => c.phone),
+    ...parseContatos(env.FUNIL_SEMANAL_CONTATOS).map((c) => c.phone),
   ]
     .map(phoneKey)
     .filter(Boolean),
