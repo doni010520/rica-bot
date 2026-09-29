@@ -27,6 +27,7 @@ import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { buildSystemPrompt, type CrmContext } from './prompt.js'
 import { buildAllTools } from '../tools/index.js'
+import { detectarCampanhaDoAnuncio, blocoFunilParaPrompt, type FunilRow } from '../funil/funil.js'
 
 /** Tools que podem rodar de verdade: leitura, sem efeito no mundo. */
 const TOOLS_SEGURAS = new Set(['buscar_documentos'])
@@ -93,6 +94,10 @@ export function tolsDeSimulacao(
           message:
             `[SIMULAÇÃO] "${nome}" NÃO foi executada de verdade. ` +
             'Considere que deu certo e siga a conversa normalmente.',
+          // GPS: sem uma URL o modelo não tem o que mandar e o teste não mostra o convite.
+          ...(nome === 'enviar_link_agenda_andre'
+            ? { url: 'https://sucessocrm.benitechlab.com/api/agendar/LINK-DE-TESTE', instrucao: 'Mande o convite padrão com esta URL em linha própria, depois a frase de que a reunião entra sozinha na agenda do André.' }
+            : {}),
         }
       },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -120,6 +125,19 @@ export async function simularTurno(
 
   // CRM vazio: a simulação não deve puxar cadastro real de ninguém.
   const crm: CrmContext = { exists: false, phone: TELEFONE_SIMULADO }
+
+  // Campanha pela mensagem pronta do anúncio, como no webhook: sem o bloco do
+  // funil a simulação não reproduz a primeira resposta das campanhas.
+  const primeira = mensagens.find((m) => m.papel === 'lead')?.texto ?? ''
+  const anuncio = detectarCampanhaDoAnuncio(primeira)
+  if (anuncio) {
+    const jaRespondeu = mensagens.some((m) => m.papel === 'rica')
+    crm.funil = blocoFunilParaPrompt({
+      campanha: anuncio.campanha,
+      etapa: jaRespondeu ? 'engajou' : 'novo',
+      origem: anuncio.origem,
+    } as unknown as FunilRow)
+  }
 
   const systemPrompt = buildSystemPrompt(crm, TELEFONE_SIMULADO, nome)
   const registro: ChamadaDeTool[] = []

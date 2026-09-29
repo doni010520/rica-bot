@@ -355,6 +355,20 @@ export async function aoResponderLead(pool: Pool, phone: string): Promise<void> 
   }
 }
 
+const PRIMEIRA_RESPOSTA: Partial<Record<Campanha, string>> = {
+  jdl:
+    'PRIMEIRA RESPOSTA (lead do anúncio da Jornada): se ele NÃO pediu valor, link ou para comprar, use a ABERTURA do ' +
+    'fluxo_venda — apresente-se e pergunte o que chamou atenção (margem, desperdícios ou gestão). "Quero informações" ' +
+    'também é ABERTURA. NÃO mande a APRESENTAÇÃO do produto, conteúdo, acesso nem preço nesta mensagem. Uma mensagem só.',
+  gps:
+    'PRIMEIRA RESPOSTA (lead do anúncio do GPS): use o texto de ENTRADA DO LEAD do fluxo_pre_vendas_gps — apresente-se ' +
+    'e pergunte o que mais chamou atenção no anúncio. NÃO apresente a plataforma, conteúdos nem preço nesta mensagem, ' +
+    'e NÃO peça nome nem padaria.',
+  mentoria:
+    'PRIMEIRA RESPOSTA (lead do anúncio da Mentoria): use a ABERTURA do fluxo_pre_vendas — apresente-se e pergunte o que ' +
+    'fez a pessoa parar no anúncio. NÃO explique a Mentoria nem o formato nesta mensagem.',
+}
+
 /** Bloco injetado no prompt: em que campanha e etapa o lead está. */
 export function blocoFunilParaPrompt(f: FunilRow | null): string {
   if (!f) return ''
@@ -373,6 +387,10 @@ export function blocoFunilParaPrompt(f: FunilRow | null): string {
   ]
   for (const [k, v] of campos) if (v) linhas.push(`${k}: ${String(v)}`)
   linhas.push(`Use estes dados: NÃO pergunte de novo o que já está preenchido.`)
+  // Primeira resposta ao lead do anúncio: o modelo tendia a despejar a
+  // apresentação do produto (JDL e GPS, 23-29/09) em vez da abertura da campanha.
+  const primeira = f.etapa === 'novo' ? PRIMEIRA_RESPOSTA[f.campanha] : undefined
+  if (primeira) linhas.push(primeira)
   linhas.push(`</funil_do_lead>`)
   return linhas.join('\n')
 }

@@ -100,3 +100,20 @@ describe('Rica fora da conversa depois do handoff (seção 12)', () => {
     expect(ETAPAS_POS_HANDOFF.has('link_agenda_enviado')).toBe(false)
   })
 })
+
+import { blocoFunilParaPrompt, type FunilRow } from '../../src/funil/funil.js'
+
+describe('primeira resposta ao lead do anúncio', () => {
+  const base = { nome: null, padaria: null, interesse_do_anuncio: null, dor_principal: null } as unknown as FunilRow
+  it('Jornada em etapa novo recebe a ordem de ABERTURA, não a apresentação', () => {
+    const b = blocoFunilParaPrompt({ ...base, campanha: 'jdl', etapa: 'novo' } as FunilRow)
+    expect(b).toContain('PRIMEIRA RESPOSTA')
+    expect(b).toContain('NÃO mande a APRESENTAÇÃO')
+  })
+  it('GPS em etapa novo recebe a ENTRADA DO LEAD', () => {
+    expect(blocoFunilParaPrompt({ ...base, campanha: 'gps', etapa: 'novo' } as FunilRow)).toContain('ENTRADA DO LEAD')
+  })
+  it('depois da primeira resposta a ordem some', () => {
+    expect(blocoFunilParaPrompt({ ...base, campanha: 'jdl', etapa: 'engajou' } as FunilRow)).not.toContain('PRIMEIRA RESPOSTA')
+  })
+})
