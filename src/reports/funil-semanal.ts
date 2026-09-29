@@ -38,6 +38,12 @@ type Linha = {
   links: number
   compras: number
   nutricao: number
+  links_agenda: number
+  confirmadas: number
+  realizadas: number
+  no_shows: number
+  vendas: number
+  horas_ate_agendar: string | null
   parados_etapa: string | null
   parados_qtd: number | null
 }
@@ -59,7 +65,8 @@ export async function coletarFunilSemanal(pool: Pool): Promise<Linha[]> {
      ), parados AS (
        SELECT DISTINCT ON (campanha) campanha, etapa, count(*) OVER (PARTITION BY campanha, etapa)::int AS qtd
        FROM f
-       WHERE etapa NOT IN ('reuniao_agendada','transferido','compra_confirmada','nao_contatar')
+       WHERE etapa NOT IN ('reuniao_agendada','transferido','compra_confirmada','nao_contatar',
+                           'confirmado_andre','reuniao_realizada','no_show','remarcado','vendido')
        ORDER BY campanha, count(*) OVER (PARTITION BY campanha, etapa) DESC
      )
      SELECT f.campanha,
@@ -74,6 +81,13 @@ export async function coletarFunilSemanal(pool: Pool): Promise<Linha[]> {
             count(*) FILTER (WHERE f.link_enviado_at IS NOT NULL)::int AS links,
             count(*) FILTER (WHERE f.compra_confirmada_at IS NOT NULL)::int AS compras,
             count(*) FILTER (WHERE f.etapa = 'nutricao')::int AS nutricao,
+            count(*) FILTER (WHERE f.link_agenda_enviado_at IS NOT NULL)::int AS links_agenda,
+            count(*) FILTER (WHERE f.confirmado_andre_at IS NOT NULL)::int AS confirmadas,
+            count(*) FILTER (WHERE f.reuniao_realizada_at IS NOT NULL)::int AS realizadas,
+            count(*) FILTER (WHERE f.no_show_at IS NOT NULL)::int AS no_shows,
+            count(*) FILTER (WHERE f.resultado = 'vendido')::int AS vendas,
+            round(avg(EXTRACT(EPOCH FROM (f.meeting_booked_at - f.created_at)) / 3600)
+              FILTER (WHERE f.meeting_booked_at IS NOT NULL)::numeric, 1)::text AS horas_ate_agendar,
             max(p.etapa) AS parados_etapa, max(p.qtd) AS parados_qtd
      FROM f LEFT JOIN parados p ON p.campanha = f.campanha
      GROUP BY f.campanha
@@ -96,6 +110,12 @@ export function formatarFunilSemanal(linhas: Linha[]): string {
     out.push(`• Qualificados: ${l.qualificados} (${pct(l.qualificados, l.responderam)})`)
     if (l.campanha === 'mentoria') {
       out.push(`• Reuniões com André: *${l.reunioes}* · transferidos: ${l.transferidos} (aceite ${pct(l.transferidos, l.qualificados)}${meta(l.transferidos, l.qualificados, 0.75)})`)
+    } else if (l.campanha === 'gps') {
+      // Manual GPS, seção 19
+      out.push(`• Links da agenda: ${l.links_agenda} (${pct(l.links_agenda, l.qualificados)} dos qualificados) · agendaram: *${l.reunioes}* (${pct(l.reunioes, l.links_agenda)})`)
+      out.push(`• Confirmadas pelo André: ${l.confirmadas} (${pct(l.confirmadas, l.reunioes)}) · realizadas: ${l.realizadas} (show rate ${pct(l.realizadas, l.reunioes)}) · no-show: ${l.no_shows}`)
+      out.push(`• Vendas do André: *${l.vendas}* (${pct(l.vendas, l.realizadas)} das realizadas · ${pct(l.vendas, l.leads)} dos leads)`)
+      if (l.horas_ate_agendar) out.push(`• Tempo médio até agendar: ${l.horas_ate_agendar.replace('.', ',')}h`)
     } else if (l.campanha === 'jdl') {
       out.push(`• Links enviados: *${l.links}* · compras informadas: ${l.compras} · para o André: ${l.transferidos}`)
     } else {

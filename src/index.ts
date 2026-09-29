@@ -23,6 +23,7 @@ import { startStaleTransferWorker, stopStaleTransferWorker } from './routing/tra
 import { startPendenciasWorker, stopPendenciasWorker } from './funil/pendencias.js'
 import { startResgateWorker, stopResgateWorker } from './funil/resgate.js'
 import { startFunilSemanalWorker, stopFunilSemanalWorker } from './reports/funil-semanal.js'
+import { startAgendaLinksWorker, stopAgendaLinksWorker } from './funil/agenda-links.js'
 import { getAllMetrics, closeMetrics, incrementMetric } from './observability/metrics.js'
 import { runPreflight } from './observability/preflight.js'
 import { logBuffer } from './observability/log-buffer.js'
@@ -304,6 +305,7 @@ async function main() {
     startPendenciasWorker(getPool())
     startResgateWorker(getPool())
     startFunilSemanalWorker(getPool())
+    startAgendaLinksWorker(getPool())
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
@@ -333,6 +335,7 @@ async function main() {
       stopPendenciasWorker()
       stopResgateWorker()
       stopFunilSemanalWorker()
+      stopAgendaLinksWorker()
       await closeExecutiveFollowup()
       await closeLeadFollowup()
       if (app) await app.close()

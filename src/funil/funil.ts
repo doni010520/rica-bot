@@ -31,7 +31,8 @@ export const ETAPAS = [
   'dor_identificada',       // dor registrada
   'qualificado',            // critérios de qualificação atingidos
   'agendamento_oferecido',  // horários do André mostrados (Mentoria)
-  'reuniao_agendada',       // evento criado na agenda do André (Mentoria)
+  'link_agenda_enviado',    // link da agenda do André enviado (GPS)
+  'reuniao_agendada',       // evento criado na agenda do André (Mentoria / GPS)
   'transferido',            // handoff ao executivo sem reunião marcada
   'oferta_solicitada',      // pediu valor/programa/link (Jornada)
   'link_enviado',           // link de compra entregue (Jornada)
@@ -39,6 +40,12 @@ export const ETAPAS = [
   'nutricao',               // cadência esgotada sem resposta
   'nao_contatar',           // pediu para não receber mais mensagens
   'perdido',
+  // Pós-agendamento — informados pelo André ao copiloto (GPS, manual seções 11-13)
+  'confirmado_andre',
+  'reuniao_realizada',
+  'no_show',
+  'remarcado',
+  'vendido',
 ] as const
 
 export type Etapa = (typeof ETAPAS)[number]
@@ -47,7 +54,18 @@ export type Etapa = (typeof ETAPAS)[number]
 const ORDEM: Record<string, number> = Object.fromEntries(ETAPAS.map((e, i) => [e, i]))
 
 /** Etapas terminais/laterais que sempre podem ser gravadas. */
-const SEMPRE_GRAVA = new Set<string>(['nao_contatar', 'perdido', 'nutricao', 'compra_confirmada'])
+const SEMPRE_GRAVA = new Set<string>([
+  'nao_contatar', 'perdido', 'nutricao', 'compra_confirmada',
+  'confirmado_andre', 'reuniao_realizada', 'no_show', 'remarcado', 'vendido',
+])
+
+/**
+ * Etapas em que o lead do GPS já é do André: a Rica NÃO fala mais com ele
+ * (manual GPS, seção 12 — "a RICA não volta a falar com o cliente").
+ */
+export const ETAPAS_POS_HANDOFF = new Set<string>([
+  'reuniao_agendada', 'transferido', 'confirmado_andre', 'reuniao_realizada', 'no_show', 'remarcado', 'vendido',
+])
 
 /** Timestamp que cada etapa carimba (só na primeira vez). */
 const CARIMBO: Partial<Record<Etapa, string>> = {
@@ -55,6 +73,8 @@ const CARIMBO: Partial<Record<Etapa, string>> = {
   engajou: 'first_lead_reply_at',
   qualificado: 'qualified_at',
   agendamento_oferecido: 'scheduling_options_shown_at',
+  link_agenda_enviado: 'link_agenda_enviado_at',
+  remarcado: 'remarcado_at',
   reuniao_agendada: 'meeting_booked_at',
   transferido: 'handoff_at',
   link_enviado: 'link_enviado_at',
@@ -66,6 +86,8 @@ export const CAMPOS_TEXTO = [
   'nome', 'padaria', 'origem', 'interesse_do_anuncio', 'dor_principal', 'impacto',
   'objetivo_declarado', 'pilar_aderente', 'decisor', 'tamanho_operacao', 'temperatura',
   'pergunta_de_compra', 'objecao', 'meeting_status',
+  // GPS (manual, seções 16 a 18)
+  'papel', 'categoria_dor', 'cidade', 'classe', 'email',
 ] as const
 
 export type CamposFunil = Partial<Record<(typeof CAMPOS_TEXTO)[number], string | undefined>> & {
@@ -94,6 +116,11 @@ export type FunilRow = {
   pergunta_de_compra: string | null
   objecao: string | null
   meeting_status: string | null
+  papel: string | null
+  categoria_dor: string | null
+  cidade: string | null
+  classe: string | null
+  handoff_at: Date | null
   meeting_start_at: Date | null
   link_enviado_at: Date | null
   nao_contatar: boolean
@@ -232,8 +259,8 @@ export async function funilAtual(pool: Pool, phone: string): Promise<FunilRow | 
     const r = await pool.query<FunilRow>(
       `SELECT campanha, etapa, nome, padaria, origem, interesse_do_anuncio, dor_principal, impacto,
               objetivo_declarado, pilar_aderente, decisor, tamanho_operacao, temperatura,
-              pergunta_de_compra, objecao, meeting_status, meeting_start_at, link_enviado_at,
-              nao_contatar, followup_step_reached, deal_id
+              pergunta_de_compra, objecao, meeting_status, papel, categoria_dor, cidade, classe,
+              handoff_at, meeting_start_at, link_enviado_at, nao_contatar, followup_step_reached, deal_id
        FROM rica_lead_funil
        WHERE organization_id = $1 AND phone = $2
        ORDER BY last_interaction_at DESC NULLS LAST
@@ -300,6 +327,12 @@ export async function aoReceberDoLead(pool: Pool, phone: string, texto: string, 
     const atual = await funilAtual(pool, phone)
     if (atual) {
       await atualizarFunil(pool, phone, atual.campanha, { etapa: 'engajou', evento: 'lead_reply', campos: deal })
+      // Primeira resposta do lead (manual GPS, seção 18) — grava só uma vez.
+      await pool.query(
+        `UPDATE rica_lead_funil SET primeira_resposta = $4
+         WHERE organization_id = $1 AND phone = $2 AND campanha = $3 AND primeira_resposta IS NULL`,
+        [env.ORG_ID, digits(phone), atual.campanha, texto.slice(0, 1000)],
+      ).catch(() => {})
     }
   } catch (err) {
     logger.warn({ err }, 'funil: aoReceberDoLead falhou (ignorado)')
@@ -334,6 +367,7 @@ export function blocoFunilParaPrompt(f: FunilRow | null): string {
     ['NOME', f.nome], ['PADARIA', f.padaria], ['INTERESSE_DO_ANUNCIO', f.interesse_do_anuncio],
     ['DOR_PRINCIPAL', f.dor_principal], ['IMPACTO', f.impacto], ['OBJETIVO_DECLARADO', f.objetivo_declarado],
     ['PILAR_ADERENTE', f.pilar_aderente], ['DECISOR', f.decisor], ['TEMPERATURA', f.temperatura],
+    ['PAPEL', f.papel], ['CATEGORIA_DOR', f.categoria_dor], ['CIDADE', f.cidade], ['CLASSE', f.classe],
     ['PERGUNTA_DE_COMPRA', f.pergunta_de_compra], ['OBJECAO', f.objecao], ['REUNIAO', f.meeting_status],
     ['LINK_ENVIADO', f.link_enviado_at ? 'sim' : ''],
   ]
@@ -341,4 +375,32 @@ export function blocoFunilParaPrompt(f: FunilRow | null): string {
   linhas.push(`Use estes dados: NÃO pergunte de novo o que já está preenchido.`)
   linhas.push(`</funil_do_lead>`)
   return linhas.join('\n')
+}
+
+/**
+ * GPS: o lead já foi entregue ao André (agendou pelo link ou foi transferido)?
+ * Então a Rica não fala mais com ele (manual, seção 12) — quem chama é o
+ * webhook, que repassa a mensagem ao André em vez de responder.
+ * Vale por GPS_SILENCIO_POS_HANDOFF_DIAS depois do handoff.
+ */
+export async function gpsEntregueAoAndre(pool: Pool, phone: string): Promise<{ nome: string | null } | null> {
+  try {
+    const r = await pool.query<{ nome: string | null }>(
+      `SELECT f.nome FROM rica_lead_funil f
+       WHERE f.organization_id = $1 AND f.phone = $2 AND f.campanha = 'gps'
+         AND f.etapa = ANY($3::text[])
+         AND COALESCE(f.handoff_at, f.updated_at) > NOW() - make_interval(days => $4)
+       UNION ALL
+       SELECT NULL FROM rica_agenda_links l
+       WHERE l.organization_id = $1 AND l.phone = $2 AND l.campanha = 'gps'
+         AND l.status IN ('agendado', 'agendando')
+         AND l.created_at > NOW() - make_interval(days => $4)
+       LIMIT 1`,
+      [env.ORG_ID, digits(phone), [...ETAPAS_POS_HANDOFF], env.GPS_SILENCIO_POS_HANDOFF_DIAS],
+    )
+    return r.rows.length ? { nome: r.rows[0]?.nome ?? null } : null
+  } catch (err) {
+    logger.warn({ err }, 'funil: falha ao checar handoff do GPS (ignorado)')
+    return null
+  }
 }

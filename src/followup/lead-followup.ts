@@ -38,7 +38,7 @@ import { isTeamPhone } from '../routing/executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { calculateBusinessHourDelayMs } from './executive-followup.js'
-import { funilAtual, naoContatar, atualizarFunil, type Campanha } from '../funil/funil.js'
+import { funilAtual, naoContatar, atualizarFunil, ETAPAS_POS_HANDOFF, type Campanha } from '../funil/funil.js'
 
 // ─── config ──────────────────────────────────────────────────────────────────
 
@@ -65,7 +65,27 @@ const TOUCH_DELAYS_H = parseHoras(env.LEAD_FOLLOWUP_DELAYS_HOURS)
 const REGUA: Record<string, { horas: number[]; corridas: boolean }> = {
   mentoria: { horas: intervalos(parseHoras(env.MENTORIA_FOLLOWUP_HORAS)), corridas: true },
   jdl: { horas: parseHoras(env.JDL_FOLLOWUP_HORAS), corridas: true },
+  // GPS (manual, seção 14): 2-4h, D+1, D+2, D+4, D+7 — marcos desde o 1º silêncio.
+  gps: { horas: intervalos(parseHoras(env.GPS_FOLLOWUP_HORAS)), corridas: true },
   padrao: { horas: TOUCH_DELAYS_H, corridas: false },
+}
+
+/** Campanhas com régua própria (as demais seguem a padrão). */
+const CAMPANHAS_COM_REGUA = new Set(['mentoria', 'jdl', 'gps'])
+
+/**
+ * GPS: o toque só sai entre 8h e 20h de Recife. Fora disso, empurra para as
+ * 8h seguintes — mensagem de padaria às 2h da manhã não resgata ninguém.
+ */
+export function ajustarParaJanelaDoDia(delayMs: number, agora = Date.now()): number {
+  const envio = agora + delayMs
+  const local = new Date(envio - 3 * 3_600_000)
+  const h = local.getUTCHours()
+  if (h >= 8 && h < 20) return delayMs
+  const alvo = new Date(local)
+  if (h >= 20) alvo.setUTCDate(alvo.getUTCDate() + 1)
+  alvo.setUTCHours(8, 0, 0, 0)
+  return alvo.getTime() + 3 * 3_600_000 - agora
 }
 
 /** [0.75, 24, 48] (marcos desde o 1º silêncio) → [0.75, 23.25, 24] (intervalos). */
@@ -134,7 +154,9 @@ export async function scheduleLeadFollowup(
   if (!campanha && pool) {
     if (await naoContatar(pool, phone)) return
     const f = await funilAtual(pool, phone)
-    campanha = f && (f.campanha === 'mentoria' || f.campanha === 'jdl') ? f.campanha : 'padrao'
+    // GPS já entregue ao André: a Rica não cobra mais (manual, seção 12).
+    if (f?.campanha === 'gps' && ETAPAS_POS_HANDOFF.has(f.etapa)) return
+    campanha = f && CAMPANHAS_COM_REGUA.has(f.campanha) ? f.campanha : 'padrao'
   }
   const regua = reguaDa(campanha)
   if (attempt < 1 || attempt > regua.horas.length) return
@@ -144,7 +166,8 @@ export async function scheduleLeadFollowup(
 
   const queue = getQueue()
   const jobId = jobIdFor(phone)
-  const delayMs = regua.corridas ? Math.round(hours * 3_600_000) : calculateBusinessHourDelayMs(hours)
+  let delayMs = regua.corridas ? Math.round(hours * 3_600_000) : calculateBusinessHourDelayMs(hours)
+  if (campanha === 'gps') delayMs = ajustarParaJanelaDoDia(delayMs)
 
   await queue.remove(jobId).catch(() => null)
   await queue.add('touch', { phone, attempt, campanha } satisfies LeadFollowupData, { jobId, delay: delayMs })
@@ -189,7 +212,7 @@ export function startLeadFollowupWorker(pool: Pool): Worker | null {
   })
 
   logger.info(
-    { padrao: TOUCH_DELAYS_H.join(','), mentoria: env.MENTORIA_FOLLOWUP_HORAS, jdl: env.JDL_FOLLOWUP_HORAS },
+    { padrao: TOUCH_DELAYS_H.join(','), mentoria: env.MENTORIA_FOLLOWUP_HORAS, jdl: env.JDL_FOLLOWUP_HORAS, gps: env.GPS_FOLLOWUP_HORAS },
     '📨 Lead followup worker (agendador rica-bot) iniciado',
   )
   return _worker
@@ -257,12 +280,19 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
     return
   }
 
-  // 4. Gera a mensagem do toque com a LLM (baseada na última msg + histórico).
+  // 4. Gera a mensagem do toque. GPS usa os textos do manual (seção 14); as
+  //    outras campanhas, a LLM (baseada na última msg + histórico).
   const funil = campanha === 'padrao' ? null : await funilAtual(pool, phone)
-  const text = await generateLeadFollowupMessage(historyToMessages(history), attempt, campanha, {
-    linkEnviado: Boolean(funil?.link_enviado_at),
-    dor: funil?.dor_principal ?? '',
-  })
+  if (campanha === 'gps' && funil && ETAPAS_POS_HANDOFF.has(funil.etapa)) {
+    log.info('lead-followup: GPS já entregue ao André — encerrando régua')
+    return
+  }
+  const text = campanha === 'gps'
+    ? mensagemResgateGps(attempt, funil?.nome ?? null)
+    : await generateLeadFollowupMessage(historyToMessages(history), attempt, campanha, {
+        linkEnviado: Boolean(funil?.link_enviado_at),
+        dor: funil?.dor_principal ?? '',
+      })
   if (!text.trim()) {
     log.warn('lead-followup: LLM retornou vazio — skip')
     return
@@ -272,6 +302,14 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
   //    por ser um LEAD, espelha o toque em deal_messages (thread do CRM).
   await sendWhatsApp(phone, text, { crmSender: 'system_followup', dealId: lead.dealId })
   log.info({ attempt, touches: regua.horas.length, campanha }, `✅ Follow-up de lead enviado (toque ${attempt})`)
+  if (campanha === 'gps') {
+    // Texto fixo não passa pela memória da conversa: grava para a Rica saber do
+    // que se trata quando o lead responder (ex.: "sim" ao convite do resgate 3).
+    await pool.query(
+      `INSERT INTO "${env.CHAT_MEMORY_TABLE}" (session_id, message) VALUES ($1, $2)`,
+      [phone, JSON.stringify({ type: 'ai', data: { content: text, additional_kwargs: {} } })],
+    ).catch(() => {})
+  }
   if (campanha !== 'padrao') {
     await pool.query(
       `UPDATE rica_lead_funil SET followup_step_reached = GREATEST(followup_step_reached, $4)
@@ -283,7 +321,7 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
   // 6. Agenda o próximo toque (se ainda houver).
   if (attempt < regua.horas.length) {
     await scheduleLeadFollowup(phone, attempt + 1, pool, campanha)
-  } else if (campanha === 'mentoria' || campanha === 'jdl') {
+  } else if (CAMPANHAS_COM_REGUA.has(campanha)) {
     // A especificação da Mentoria proíbe "encerrar como perdido apenas porque não
     // respondeu": o lead vai para NUTRIÇÃO (e a Jornada pode entrar no resgate).
     log.info('lead-followup: régua da campanha esgotada — lead vai para nutrição')
@@ -371,6 +409,38 @@ REGRAS:
 5. NUNCA invente informação. Se não souber o nome, não use nome.
 6. Não ofereça produtos suspensos nem foge do que a pessoa demonstrou interesse.
 7. SAÍDA: só o texto da mensagem, sem aspas, sem prefácio.`
+
+function primeiroNome(nome: string | null): string {
+  const n = (nome ?? '').trim()
+  if (!n || /^\+?\d[\d\s-]+$/.test(n)) return ''
+  return n.split(/\s+/)[0] ?? ''
+}
+
+function saudacao(agora = new Date()): string {
+  const h = new Date(agora.getTime() - 3 * 3_600_000).getUTCHours()
+  return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'
+}
+
+/**
+ * Cadência de resgate do GPS — textos do manual (seção 14), com o nome do lead
+ * quando a Rica souber. Interrompida se o lead responder ou agendar.
+ */
+export function mensagemResgateGps(passo: number, nome: string | null, agora = new Date()): string {
+  const n = primeiroNome(nome)
+  const vN = n ? `, ${n}` : ''
+  switch (passo) {
+    case 1:
+      return `Oi${vN} 😊 Fiquei curiosa com uma coisa: você chegou até a GPS por algum motivo. O que você gostaria de melhorar hoje na sua padaria que fez você parar naquele anúncio?`
+    case 2:
+      return `${saudacao(agora)}${vN}! Rica aqui, da Sucesso na Padaria 😊 Ontem você me chamou para conhecer a GPS e acabamos não continuando. Me responde só uma coisa e eu já consigo te orientar: se você pudesse melhorar UMA área da padaria hoje, qual seria? Equipe, vendas, gestão ou lucratividade?`
+    case 3:
+      return `${n ? `${n}, uma` : 'Uma'} das vantagens da GPS é justamente ter conteúdo pensado para quem vive os desafios da padaria: gestão, liderança, vendas, financeiro, produção, processos e lucratividade. Pelo que você busca, acredito que vale conhecer. Quer que eu te envie a agenda do André para uma conversa rápida de 30 minutos?`
+    case 4:
+      return `Posso te fazer uma pergunta rápida${vN}? Muitas vezes a gente investe bastante em equipamento, produto e estrutura da padaria, mas deixa o conhecimento de quem toma as decisões para depois. Você sente que hoje existe alguma área da sua gestão em que mais conhecimento poderia melhorar seus resultados?`
+    default:
+      return `Oi${vN} 😊 Como não conseguimos continuar nossa conversa, vou encerrar meu acompanhamento por aqui para não ficar te chamando. Mas quando quiser desenvolver sua gestão, sua equipe ou conhecer melhor a GPS, é só mandar “GPS” aqui que eu retomo de onde paramos. A Sucesso na Padaria fica à disposição. 💚`
+  }
+}
 
 /**
  * Mensagens-base das réguas de campanha (documentos da força-tarefa, set/2026).

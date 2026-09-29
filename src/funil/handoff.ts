@@ -19,6 +19,7 @@ import { whatsappLink } from '../uazapi/normalize-phone.js'
 import { EXECUTIVES, type Executive } from '../routing/executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { scheduleExecutiveFollowup } from '../followup/executive-followup.js'
+import { cancelLeadFollowup } from '../followup/lead-followup.js'
 import { atualizarFunil, funilAtual, type CamposFunil, type Campanha } from './funil.js'
 
 export type Ficha = CamposFunil & { produto?: string | undefined }
@@ -61,12 +62,101 @@ function linhaReuniao(s: SituacaoReuniao): string {
   }
 }
 
+/** 'DD/MM' e 'HH:MM' no fuso de Recife (UTC-3 o ano todo). */
+export function dataHoraRecife(iso: string): { data: string; hora: string } {
+  const local = new Date(new Date(iso).getTime() - 3 * 3_600_000)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return { data: `${p(local.getUTCDate())}/${p(local.getUTCMonth() + 1)}`, hora: `${p(local.getUTCHours())}:${p(local.getUTCMinutes())}` }
+}
+
+function primeiroNomeDe(nome: string | null | undefined): string {
+  const n = (nome ?? '').trim()
+  if (!n || /^\+?\d[\d\s-]+$/.test(n)) return ''
+  return n.split(/\s+/)[0] ?? ''
+}
+
+/**
+ * Briefing do GPS (manual, seção 10) + script obrigatório do André (seção 11).
+ * A partir daqui o André é o ÚNICO interlocutor do lead: a Rica sai da conversa.
+ */
+export function montarBriefingGps(telefone: string, ficha: Ficha, reuniao: SituacaoReuniao): string {
+  const v = (s: string | null | undefined) => (typeof s === 'string' && s.trim() ? s.trim() : '')
+  const linhas: string[] = []
+  const agendada = reuniao.tipo === 'agendada'
+  linhas.push(agendada ? '🔔 *NOVO AGENDAMENTO GPS*' : '🔔 *NOVO LEAD GPS PRA VOCÊ*')
+  if (!agendada) linhas.push('', linhaReuniao(reuniao))
+  linhas.push('')
+  linhas.push(`Nome: ${v(ficha.nome) || '(não informado)'}`)
+  linhas.push(`WhatsApp: ${telefone}`)
+  if (v(ficha.padaria)) linhas.push(`Empresa/Padaria: ${v(ficha.padaria)}`)
+  if (v(ficha.cidade)) linhas.push(`Cidade: ${v(ficha.cidade)}`)
+  if (v(ficha.papel)) linhas.push(`Cargo/Papel: ${v(ficha.papel)}`)
+  linhas.push(`Origem: ${v(ficha.origem) || 'WhatsApp'}`)
+  if (v(ficha.interesse_do_anuncio)) linhas.push(`Principal interesse: ${v(ficha.interesse_do_anuncio)}`)
+  if (v(ficha.dor_principal)) linhas.push(`Principal dor: ${v(ficha.dor_principal)}${v(ficha.categoria_dor) ? ` (${v(ficha.categoria_dor)})` : ''}`)
+  const obs = [
+    v(ficha.objetivo_declarado) && `objetivo: ${v(ficha.objetivo_declarado)}`,
+    v(ficha.objecao) && `objeção: ${v(ficha.objecao)}`,
+    v(ficha.pergunta_de_compra) && `perguntou: ${v(ficha.pergunta_de_compra)}`,
+    v(ficha.classe) && `classe ${v(ficha.classe)}`,
+  ].filter(Boolean)
+  if (obs.length) linhas.push(`Observação: ${obs.join(' · ')}`)
+
+  let data = ''
+  let hora = ''
+  if (agendada) {
+    ;({ data, hora } = dataHoraRecife(reuniao.inicioIso))
+    linhas.push('')
+    linhas.push(`📅 Reunião: ${data}`)
+    linhas.push(`⏰ Horário: ${hora}`)
+  }
+  linhas.push('')
+  linhas.push(
+    agendada
+      ? '*AÇÃO DO ANDRÉ:* entrar em contato com o cliente assim que receber esta mensagem, apresentar-se e pedir a confirmação da reunião.'
+      : '*AÇÃO DO ANDRÉ:* entrar em contato com o cliente agora, apresentar-se e combinar o horário da conversa.',
+  )
+  linhas.push(`⚡ ${whatsappLink(telefone)}`)
+
+  if (agendada) {
+    const nome = primeiroNomeDe(ficha.nome)
+    const dor = v(ficha.dor_principal) || v(ficha.objetivo_declarado) || v(ficha.interesse_do_anuncio)
+    linhas.push('')
+    linhas.push('✍️ _Mensagem sugerida:_')
+    linhas.push(
+      `Oi${nome ? `, ${nome}` : ''}! Tudo bem? Aqui é André, da Sucesso na Padaria. A Rica me avisou que você agendou uma conversa comigo para conhecermos melhor o seu momento e eu te apresentar a GPS.` +
+        (dor ? ` Ela também comentou que hoje você está buscando ${dor.replace(/[.!]+$/, '')}.` : '') +
+        ` Nossa conversa ficou para ${data}, às ${hora}. Está confirmado para você?`,
+    )
+  }
+  linhas.push('')
+  linhas.push('📌 _A Rica saiu da conversa: confirmação, remarcação, lembretes e follow-up agora são seus. Depois me conte aqui ("confirmou", "aconteceu", "não apareceu", "vendi", "não fechou + motivo"). Para remarcar, peça "link novo pro [nome ou telefone]"._')
+  linhas.push('')
+  linhas.push('🤖 _Rica - Assistente de Vendas_')
+  return linhas.join('\n')
+}
+
+/** Aviso ao André quando o cliente escolhe um novo horário no link que ELE mandou. */
+export function montarAvisoRemarcacao(telefone: string, nome: string | null, inicioIso: string): string {
+  const { data, hora } = dataHoraRecife(inicioIso)
+  return [
+    '🔁 *REUNIÃO GPS REMARCADA*',
+    '',
+    `${nome?.trim() || 'O cliente'} escolheu um novo horário no seu link.`,
+    `📅 ${data} · ⏰ ${hora} (já está na sua agenda)`,
+    `⚡ ${whatsappLink(telefone)}`,
+    '',
+    '🤖 _Rica - Assistente de Vendas_',
+  ].join('\n')
+}
+
 export function montarFichaParaExecutivo(
   exec: Executive,
   telefone: string,
   ficha: Ficha,
   reuniao: SituacaoReuniao,
 ): string {
+  if (ficha.produto === 'GPS Padaria') return montarBriefingGps(telefone, ficha, reuniao)
   const primeiro = exec.name.split(' ')[0] ?? exec.name
   const linhas: string[] = []
   linhas.push(`🎯 *LEAD DA ${(ficha.produto || 'MENTORIA').toUpperCase()} PRA VOCÊ, ${primeiro.toUpperCase()}!*`)
@@ -122,6 +212,8 @@ export async function handoffEstruturado(
   const ficha = { ...(gravado ?? {}), ...stripVazios(opts.ficha) } as unknown as Ficha
 
   await sendWhatsApp(exec.phoneFormatted, montarFichaParaExecutivo(exec, telefone, ficha, reuniao), { crmSender: null })
+  // Lead entregue: a régua de follow-up da Rica para aqui.
+  await cancelLeadFollowup(telefone).catch(() => {})
 
   if (exec.email !== EXECUTIVES.MARIA_HELENA.email) {
     const copia =

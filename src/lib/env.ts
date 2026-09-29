@@ -186,6 +186,14 @@ const EnvSchema = z.object({
   MENTORIA_FOLLOWUP_HORAS: z.string().default('0.75,24,48,72,120,168'),
   // Cadência da Jornada sem resposta: 1 retomada 3h depois.
   JDL_FOLLOWUP_HORAS: z.string().default('3'),
+  // Cadência de resgate do GPS (manual, seção 14): 2-4h, D+1, D+2, D+4, D+7
+  // (marcos desde o 1º silêncio, horas corridas, enviados entre 8h e 20h).
+  GPS_FOLLOWUP_HORAS: z.string().default('3,24,48,96,168'),
+  // GPS: de quanto em quanto tempo o bot confere se um lead agendou pelo link.
+  AGENDA_LINK_POLL_SEGUNDOS: intStr(30),
+  // GPS: por quantos dias depois do handoff a Rica fica fora da conversa
+  // (mensagens do lead vão direto para o André).
+  GPS_SILENCIO_POS_HANDOFF_DIAS: intStr(60),
 
   // Resgate de leads antigos da Jornada — DESLIGADO por padrão (risco de
   // bloqueio do número). Ligar com RESGATE_ENABLED=true.

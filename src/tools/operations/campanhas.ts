@@ -7,8 +7,10 @@
  *   nao_contatar             → lead pediu para parar: sai de todas as cadências
  *   consultar_horarios_andre → horários LIVRES do André hoje e amanhã (Google Agenda)
  *   agendar_reuniao_andre    → cria a reunião de 30 min e faz o handoff com a ficha
+ *   enviar_link_agenda_andre → GPS: link da agenda do André (hoje e próximo dia útil);
+ *                              o lead escolhe e o evento entra sozinho na agenda
  *   handoff_mentoria         → handoff SEM reunião (sem horário, outra data, agenda
- *                              desconectada, lead quer falar já)
+ *                              desconectada, lead quer falar já) — Mentoria e GPS
  *   registrar_pendencia_jdl  → aluno sem acesso / reembolso → avisa e acompanha
  */
 
@@ -40,7 +42,20 @@ const FichaSchema = z.object({
   temperatura: z.enum(['quente', 'morna', 'fria']).optional(),
   pergunta_de_compra: z.string().optional().describe('Ex.: "valor e próxima turma"'),
   objecao: z.string().optional().describe('Objeção citada (preço, tempo, sócio...)'),
+  // GPS (manual, seções 16 a 18)
+  papel: z.enum(['dono', 'gestor', 'profissional', 'iniciante']).optional().describe('Papel do lead na padaria (GPS)'),
+  categoria_dor: z.enum(['Equipe', 'Gestão', 'Vendas', 'Lucratividade', 'Processos', 'Desenvolvimento', 'Outro']).optional().describe('Categoria da dor (GPS)'),
+  cidade: z.string().optional(),
+  classe: z.enum(['A', 'B', 'C']).optional().describe('GPS: A = dono/gestor/decisor com dor clara; B = interesse real, dor pouco clara; C = curiosidade/baixa aderência'),
+  email: z.string().optional().describe('Só se o lead informar espontaneamente'),
 })
+
+const PRODUTO: Record<Campanha, string> = {
+  mentoria: 'Mentoria Padaria Lucrativa',
+  jdl: 'Jornada Online',
+  gps: 'GPS Padaria',
+  outro: 'Mentoria Padaria Lucrativa',
+}
 
 /** Número de alguém é o próprio lead desta conversa (tools só agem sobre ele). */
 export function buildCampanhasTools(phone: string, pool: Pool) {
@@ -137,7 +152,7 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
     execute: async ({ inicio, ...ficha }) => {
       const campanha = await campanhaAtual()
       const dealId = await dealIdDoLead()
-      const completa: Ficha = { ...ficha, produto: 'Mentoria Padaria Lucrativa' }
+      const completa: Ficha = { ...ficha, produto: PRODUTO[campanha] }
       try {
         const r = await crmRequest<{ ok: boolean; event_id: string; inicio: string; rotulo: string }>(
           '/api/rica/agenda/agendar',
@@ -150,6 +165,7 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
               lead: { nome: ficha.nome, telefone: phone, padaria: ficha.padaria },
               resumo: resumoDaFicha({ ...((await funilAtual(pool, phone)) ?? {}), ...ficha } as unknown as Ficha),
               deal_id: dealId,
+              produto: PRODUTO[campanha],
             },
             operationName: 'agenda_agendar',
             timeoutMs: 20_000,
@@ -176,10 +192,60 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
     },
   })
 
+  // ── enviar_link_agenda_andre (GPS) ────────────────────────────────────────
+  const enviar_link_agenda_andre = tool({
+    description:
+      'GPS: gera o LINK da agenda do André para o lead escolher o horário da conversa de 30 min (só horários livres de HOJE e do ' +
+      'PRÓXIMO DIA ÚTIL). Chame quando o lead do GPS tiver aderência mínima (dor ou interesse identificado) — passe a ficha com o ' +
+      'que você já sabe. Depois mande o convite com a URL devolvida. Quando o lead escolher, a reunião entra sozinha na agenda do ' +
+      'André e ele é avisado: você NÃO confirma nada depois.',
+    parameters: FichaSchema,
+    execute: async (ficha) => {
+      const campanha = await campanhaAtual('gps')
+      const dealId = await dealIdDoLead()
+      await atualizarFunil(pool, phone, campanha, { campos: ficha })
+      try {
+        const r = await crmRequest<{ ok: boolean; conectado: boolean; url?: string; excecao?: boolean; horarios?: number; primeiro_horario?: string | null }>(
+          '/api/rica/agenda/link',
+          {
+            method: 'POST',
+            body: { executivo_email: andre.email, telefone: phone, campanha, deal_id: dealId, criado_por: 'rica' },
+            operationName: 'agenda_link',
+            timeoutMs: 20_000,
+          },
+        )
+        if (!r.ok || !r.url) {
+          await handoffEstruturado(pool, { telefone: phone, campanha, exec: andre, ficha: { ...ficha, produto: PRODUTO[campanha] }, reuniao: { tipo: 'agenda_nao_conectada' }, dealId })
+          return { success: false, instrucao: 'A agenda do André não está disponível. Já passei o caso a ele: diga ao lead que o André vai chamar no WhatsApp para combinar o melhor horário.' }
+        }
+        if (!r.horarios) {
+          await handoffEstruturado(pool, { telefone: phone, campanha, exec: andre, ficha: { ...ficha, produto: PRODUTO[campanha] }, reuniao: { tipo: 'sem_horario' }, dealId })
+          return { success: false, instrucao: 'Não há horário livre nos próximos dias. Já passei o caso ao André: diga que os horários mais próximos foram preenchidos e que o André vai chamar no WhatsApp para combinar.' }
+        }
+        await atualizarFunil(pool, phone, campanha, {
+          etapa: 'link_agenda_enviado',
+          evento: 'link_agenda_enviado',
+          dados: { excecao: r.excecao, primeiro_horario: r.primeiro_horario },
+        })
+        return {
+          success: true,
+          url: r.url,
+          instrucao: r.excecao
+            ? `Os horários de hoje e do próximo dia útil foram preenchidos; o link mostra só o próximo dia disponível (${r.primeiro_horario}). Diga isso ao lead em uma frase e mande o link.`
+            : 'Mande o convite padrão com esta URL em linha própria, depois a frase de que a reunião entra sozinha na agenda do André.',
+        }
+      } catch (err) {
+        log.warn({ err }, 'enviar_link_agenda_andre falhou — handoff sem reunião')
+        await handoffEstruturado(pool, { telefone: phone, campanha, exec: andre, ficha: { ...ficha, produto: PRODUTO[campanha] }, reuniao: { tipo: 'agenda_nao_conectada' }, dealId })
+        return { success: false, instrucao: 'Não consegui gerar o link. Já passei o caso ao André: diga ao lead que o André vai chamar no WhatsApp para combinar o horário.' }
+      }
+    },
+  })
+
   // ── handoff_mentoria ──────────────────────────────────────────────────────
   const handoff_mentoria = tool({
     description:
-      'Entrega o lead ao André com a ficha completa SEM reunião marcada. Use quando: não há horário hoje/amanhã (sem_horario), ' +
+      'Mentoria ou GPS: entrega o lead ao André com a ficha completa SEM reunião marcada. Use quando: não há horário hoje/amanhã (sem_horario), ' +
       'o lead pediu data depois de amanhã (pediu_outra_data), a agenda não está conectada/falhou (agenda_nao_conectada), ' +
       'ou o lead quer falar com alguém agora (sem_reuniao). Nunca transfira sem preencher dor e objetivo.',
     parameters: FichaSchema.extend({
@@ -195,7 +261,7 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
         telefone: phone,
         campanha,
         exec: andre,
-        ficha: { ...ficha, produto: campanha === 'jdl' ? 'Jornada Online' : 'Mentoria Padaria Lucrativa' },
+        ficha: { ...ficha, produto: PRODUTO[campanha] },
         reuniao,
         dealId: await dealIdDoLead(),
       })
@@ -234,6 +300,7 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
     nao_contatar,
     consultar_horarios_andre,
     agendar_reuniao_andre,
+    enviar_link_agenda_andre,
     handoff_mentoria,
     registrar_pendencia_jdl,
   }

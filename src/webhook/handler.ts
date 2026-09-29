@@ -37,8 +37,9 @@ import {
   sendMemoryClearedMessage,
 } from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
-import { isTeamPhone } from '../routing/executives.config.js'
-import { aoReceberDoLead, aoResponderLead, funilAtual, blocoFunilParaPrompt } from '../funil/funil.js'
+import { isTeamPhone, EXECUTIVES } from '../routing/executives.config.js'
+import { aoReceberDoLead, aoResponderLead, funilAtual, blocoFunilParaPrompt, gpsEntregueAoAndre } from '../funil/funil.js'
+import { whatsappLink } from '../uazapi/normalize-phone.js'
 import { tryResolverPendencia } from '../funil/pendencias.js'
 import { logger, webhookLogger } from '../observability/logger.js'
 import { env } from '../lib/env.js'
@@ -215,6 +216,23 @@ export async function handleBufferedMessage(
   // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
   //    Passa a 1a mensagem para detectar o funil (ex: GPS nasce no funil GPS)
   const crm = await preFetchCrm(phone, '', combinedText)
+
+  // 1.05 GPS JÁ ENTREGUE AO ANDRÉ: depois do agendamento/handoff a Rica sai da
+  //      conversa (manual GPS, seção 12). A mensagem vai para o André, que é o
+  //      único interlocutor agora — sem resposta da Rica e sem follow-up.
+  const comAndre = await gpsEntregueAoAndre(deps.pool, phone)
+  if (comAndre) {
+    saveMessage({ phone, direction: 'in', text: combinedText, sender: 'cliente', dealId: crm.dealId })
+    const quem = comAndre.nome || crm.contactName || 'Lead'
+    await sendWhatsApp(
+      EXECUTIVES.ANDRE.phoneFormatted,
+      `💬 *${quem} (lead GPS) escreveu no WhatsApp da Rica:*\n\n"${combinedText.slice(0, 1200)}"\n\n` +
+        `A Rica não responde mais esse lead, ele é seu. Responda por aqui:\n⚡ ${whatsappLink(phone)}\n\n🤖 _Rica - Assistente de Vendas_`,
+      { crmSender: null },
+    ).catch((err) => log.warn({ err }, 'repasse ao André falhou'))
+    log.info('Lead GPS já com o André — mensagem repassada, Rica não responde')
+    return
+  }
 
   // 1.1 Funil da campanha: reconhece o anúncio (Mentoria/Jornada/GPS), marca
   //     que o lead respondeu e injeta no prompt a etapa + o que já foi coletado.

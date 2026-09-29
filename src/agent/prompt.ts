@@ -98,7 +98,7 @@ function buildCrmBlock(crm: CrmContext): string {
     REGRA DO NOME: Se CONTACT_NAME estiver vazio ou "(desconhecido)", NUNCA
     use o número de telefone como nome. Cumprimente SEM nome (ex: "Oi! 😊")
     e, com naturalidade, pergunte como pode chamar a pessoa — EXCETO nas
-    campanhas Mentoria e Jornada: lá o nome só é pedido depois do diagnóstico.
+    campanhas Mentoria, Jornada e GPS: lá o nome só é pedido depois do diagnóstico.
 </crm_pre_carregado>${crm.funil ? `
 ${crm.funil}` : ''}`
 }
