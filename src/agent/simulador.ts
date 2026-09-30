@@ -136,6 +136,7 @@ export async function simularTurno(
       campanha: anuncio.campanha,
       etapa: jaRespondeu ? 'engajou' : 'novo',
       origem: anuncio.origem,
+      message_count_rica: mensagens.filter((m) => m.papel === 'rica').length,
     } as unknown as FunilRow)
   }
 

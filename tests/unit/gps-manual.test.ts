@@ -117,3 +117,29 @@ describe('primeira resposta ao lead do anúncio', () => {
     expect(blocoFunilParaPrompt({ ...base, campanha: 'jdl', etapa: 'engajou' } as FunilRow)).not.toContain('PRIMEIRA RESPOSTA')
   })
 })
+
+import { orientacaoGps } from '../../src/funil/funil.js'
+
+describe('GPS no meio da conversa (leads reais de 29-30/09)', () => {
+  it('cumprimento ou "como funciona" seguem o fluxo, sem recomeçar', () => {
+    const o = orientacaoGps({ etapa: 'engajou', dor_principal: null, message_count_rica: 1 })
+    expect(o).toContain('NÃO se reapresente')
+    expect(o).toContain('FACILITADOR')
+  })
+  it('dor identificada → link na hora', () => {
+    expect(orientacaoGps({ etapa: 'dor_identificada', dor_principal: 'equipe', message_count_rica: 2 })).toContain('enviar_link_agenda_andre')
+  })
+  it('3 mensagens da Rica sem link → manda o link', () => {
+    expect(orientacaoGps({ etapa: 'engajou', dor_principal: null, message_count_rica: 3 })).toContain('JÁ FEZ as perguntas')
+  })
+  it('link já enviado → não gera outro sem motivo', () => {
+    expect(orientacaoGps({ etapa: 'link_agenda_enviado', dor_principal: 'x', message_count_rica: 4 })).toContain('JÁ FOI enviado')
+  })
+  it('depois do handoff não orienta nada (a Rica nem responde)', () => {
+    expect(orientacaoGps({ etapa: 'reuniao_agendada', dor_principal: 'x' })).toBe('')
+  })
+  it('resgate de quem já recebeu o link fala do link', () => {
+    expect(mensagemResgateGps(1, 'Ana', new Date(), true)).toContain('Conseguiu abrir o link da agenda do André?')
+    expect(mensagemResgateGps(4, 'Ana', new Date(), true)).toMatch(/^Posso te fazer uma pergunta rápida, Ana\?/)
+  })
+})

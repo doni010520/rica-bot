@@ -125,6 +125,7 @@ export type FunilRow = {
   link_enviado_at: Date | null
   nao_contatar: boolean
   followup_step_reached: number
+  message_count_rica: number
   deal_id: string | null
 }
 
@@ -260,7 +261,8 @@ export async function funilAtual(pool: Pool, phone: string): Promise<FunilRow | 
       `SELECT campanha, etapa, nome, padaria, origem, interesse_do_anuncio, dor_principal, impacto,
               objetivo_declarado, pilar_aderente, decisor, tamanho_operacao, temperatura,
               pergunta_de_compra, objecao, meeting_status, papel, categoria_dor, cidade, classe,
-              handoff_at, meeting_start_at, link_enviado_at, nao_contatar, followup_step_reached, deal_id
+              handoff_at, meeting_start_at, link_enviado_at, nao_contatar, followup_step_reached,
+              message_count_rica, deal_id
        FROM rica_lead_funil
        WHERE organization_id = $1 AND phone = $2
        ORDER BY last_interaction_at DESC NULLS LAST
@@ -369,6 +371,33 @@ const PRIMEIRA_RESPOSTA: Partial<Record<Campanha, string>> = {
     'fez a pessoa parar no anúncio. NÃO explique a Mentoria nem o formato nesta mensagem.',
 }
 
+/**
+ * GPS no meio da conversa (30/09): em leads reais a Rica recomeçava do zero num
+ * "Bom dia" ("Sucesso no Resultado, como posso te chamar?"), ignorava "como
+ * funciona?" e fazia pergunta a mais depois da dor. O próximo passo do manual
+ * depende do estado — dizer qual é, em vez de deixar o modelo escolher.
+ */
+export function orientacaoGps(f: Pick<FunilRow, 'etapa' | 'dor_principal'> & { message_count_rica?: number }): string {
+  if (ETAPAS_POS_HANDOFF.has(f.etapa) || f.etapa === 'nao_contatar') return ''
+  const base = 'CONTINUE o fluxo_pre_vendas_gps: você é a Rica, da Sucesso na Padaria; NÃO se reapresente, NÃO recomece a conversa e NÃO peça nome nem padaria.'
+  if (f.etapa === 'link_agenda_enviado') {
+    return `${base} O link da agenda do André JÁ FOI enviado: responda o que o lead disser e reforce que é só escolher o horário no link (sem gerar outro, a não ser que ele diga que o link não abriu ou que nenhum horário serve).`
+  }
+  if (f.dor_principal) {
+    return `${base} A DOR JÁ FOI IDENTIFICADA ("${f.dor_principal}"): NÃO faça mais perguntas de qualificação. Nesta resposta: espelhamento + apresentação curta + chame enviar_link_agenda_andre e mande o convite com o link.`
+  }
+  // Abertura + 2 perguntas já feitas (manual: "no máximo 2 a 3 perguntas").
+  if ((f.message_count_rica ?? 0) >= 3) {
+    return `${base} Você JÁ FEZ as perguntas de qualificação. Se o lead contou algum interesse ou desafio, NÃO pergunte mais nada: espelhe o que ele disse, apresente a GPS em uma frase, chame enviar_link_agenda_andre e mande o convite com o link. Só pergunte de novo se ele ainda não disse nada sobre a padaria.`
+  }
+  return (
+    `${base} Próximo passo: se o lead só cumprimentou ("bom dia", "oi") ou não soube dizer o que chamou atenção, use o FACILITADOR ` +
+    '(passo 2, as 4 opções). Se perguntou "como funciona" ou algo da plataforma, responda em UMA frase curta com as informações ' +
+    'oficiais e emende o FACILITADOR. Se ele disse um interesse (equipe, gestão, vendas, atualização), faça UMA pergunta de ' +
+    'aprofundamento (passo 3) e, na resposta seguinte, vá para o link. No máximo 2 perguntas antes do link.'
+  )
+}
+
 /** Bloco injetado no prompt: em que campanha e etapa o lead está. */
 export function blocoFunilParaPrompt(f: FunilRow | null): string {
   if (!f) return ''
@@ -391,6 +420,10 @@ export function blocoFunilParaPrompt(f: FunilRow | null): string {
   // apresentação do produto (JDL e GPS, 23-29/09) em vez da abertura da campanha.
   const primeira = f.etapa === 'novo' ? PRIMEIRA_RESPOSTA[f.campanha] : undefined
   if (primeira) linhas.push(primeira)
+  else if (f.campanha === 'gps') {
+    const o = orientacaoGps(f)
+    if (o) linhas.push(o)
+  }
   linhas.push(`</funil_do_lead>`)
   return linhas.join('\n')
 }

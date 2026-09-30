@@ -288,7 +288,7 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
     return
   }
   const text = campanha === 'gps'
-    ? mensagemResgateGps(attempt, funil?.nome ?? null)
+    ? mensagemResgateGps(attempt, funil?.nome ?? null, new Date(), funil?.etapa === 'link_agenda_enviado')
     : await generateLeadFollowupMessage(historyToMessages(history), attempt, campanha, {
         linkEnviado: Boolean(funil?.link_enviado_at),
         dor: funil?.dor_principal ?? '',
@@ -425,9 +425,20 @@ function saudacao(agora = new Date()): string {
  * Cadência de resgate do GPS — textos do manual (seção 14), com o nome do lead
  * quando a Rica souber. Interrompida se o lead responder ou agendar.
  */
-export function mensagemResgateGps(passo: number, nome: string | null, agora = new Date()): string {
+export function mensagemResgateGps(passo: number, nome: string | null, agora = new Date(), linkEnviado = false): string {
   const n = primeiroNome(nome)
   const vN = n ? `, ${n}` : ''
+  // Quem JÁ recebeu o link não pode ouvir "o que você quer melhorar?" de novo
+  // (lead real, 29/09): os primeiros toques falam do link; os demais seguem o manual.
+  if (linkEnviado && passo === 1) {
+    return `Oi${vN} 😊 Conseguiu abrir o link da agenda do André? Se nenhum horário encaixou, me diz qual período fica melhor pra você que eu te ajudo.`
+  }
+  if (linkEnviado && passo === 2) {
+    return `${saudacao(agora)}${vN}! Rica aqui, da Sucesso na Padaria 😊 O link da agenda do André continua aberto: é só escolher o horário que a conversa de 30 minutos já fica marcada. Pra você costuma ser melhor de manhã ou à tarde?`
+  }
+  if (linkEnviado && passo === 3) {
+    return `${n ? `${n}, uma` : 'Uma'} das vantagens da GPS é justamente ter conteúdo pensado para quem vive os desafios da padaria: gestão, liderança, vendas, financeiro, produção, processos e lucratividade. Pelo que você busca, acredito que vale conhecer. Quer que eu te mande um link novo da agenda do André com os horários mais próximos?`
+  }
   switch (passo) {
     case 1:
       return `Oi${vN} 😊 Fiquei curiosa com uma coisa: você chegou até a GPS por algum motivo. O que você gostaria de melhorar hoje na sua padaria que fez você parar naquele anúncio?`
