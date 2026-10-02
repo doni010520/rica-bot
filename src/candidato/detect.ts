@@ -20,6 +20,17 @@ import { env } from '../lib/env.js'
 import { normalizePhone } from '../uazapi/normalize-phone.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { logger } from '../observability/logger.js'
+import { shouldNotify } from '../dedup/redis-incr.js'
+
+/** Janela em que o candidato não recebe de novo a orientação do currículo. */
+const ORIENTACAO_TTL_S = 7 * 24 * 3600
+
+/** Primeiro nome real; "Sem nome" é o placeholder do CRM, não um nome. */
+function primeiroNome(nome: string): string {
+  const n = nome.trim()
+  if (!n || /^sem nome$/i.test(n)) return ''
+  return n.split(/\s+/)[0] ?? ''
+}
 
 // ─── regex (fonte de verdade: extraída do IF_Candidato do n8n) ────────────────
 // Nota: .seletivo e .de.trabalho usam [ .] em vez de . para explicitar intenção
@@ -58,19 +69,24 @@ export async function notifyHR(params: {
 }): Promise<boolean> {
   const { candidatePhone, candidateName, candidateMessage, dealId } = params
   const log = logger.child({ fn: 'notifyHR', candidatePhone: candidatePhone.slice(-4) })
+  const nome = primeiroNome(candidateName)
+
+  // 30/09: candidata mandou áudio, foto do currículo e outro áudio e recebeu o
+  // mesmo texto 3 vezes. A orientação sai uma vez; o resto só vai para o RH.
+  const primeiraVez = await shouldNotify(candidatePhone, 'candidato', ORIENTACAO_TTL_S)
 
   const hrPhone = normalizePhone(env.HR_NOTIFY_PHONE)
 
   // Mensagem para Vanessa
   const hrMessage =
-    `🔔 *Novo candidato detectado*\n\n` +
-    `👤 *Nome:* ${candidateName || 'Não informado'}\n` +
+    (primeiraVez ? `🔔 *Novo candidato detectado*\n\n` : `🔔 *Nova mensagem de candidato*\n\n`) +
+    `👤 *Nome:* ${nome ? candidateName : 'Não informado'}\n` +
     `📱 *Telefone:* ${candidatePhone}\n\n` +
     `💬 *Mensagem:*\n${candidateMessage}`
 
   // Mensagem de orientação para o candidato
   const candidateReply =
-    `Olá ${candidateName ? candidateName.split(' ')[0] : ''}! 😊\n\n` +
+    `Olá${nome ? ` ${nome}` : ''}! 😊\n\n` +
     `Percebi que você tem interesse em fazer parte da nossa equipe!\n\n` +
     `Para dar continuidade ao processo seletivo, por favor envie seu currículo para:\n` +
     `📧 *${env.HR_EMAIL}*\n\n` +
@@ -82,12 +98,14 @@ export async function notifyHR(params: {
     await sendWhatsApp(hrPhone, hrMessage, { crmSender: null })
 
     // Responde ao candidato — entra no thread como resposta da Rica.
-    await sendWhatsApp(normalizePhone(candidatePhone), candidateReply, {
-      crmSender: 'system_candidato',
-      dealId,
-    })
+    if (primeiraVez) {
+      await sendWhatsApp(normalizePhone(candidatePhone), candidateReply, {
+        crmSender: 'system_candidato',
+        dealId,
+      })
+    }
 
-    log.info('Candidato notificado — HR e candidato informados')
+    log.info({ primeiraVez }, primeiraVez ? 'Candidato notificado — HR e candidato informados' : 'Candidato já orientado — só o RH recebe a mensagem')
     return true
   } catch (err) {
     log.error({ err }, 'Falha ao notificar RH sobre candidato')
