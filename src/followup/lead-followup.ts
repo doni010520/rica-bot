@@ -23,7 +23,7 @@
  * "Só leads novos daqui pra frente": como só agenda para quem interage a partir
  * de agora, o backlog parado nunca entra — sem varredura, sem disparo em massa.
  *
- * Dedup: jobId = lead-fu-{phone} (upsert — reagendar cancela o anterior).
+ * Dedup: jobId = lead-fu-{phone}-t{toque}; agendar ou cancelar remove os toques pendentes do lead.
  */
 
 import { Queue, Worker, type Job } from 'bullmq'
@@ -130,8 +130,24 @@ function getQueue(): Queue {
   return _queue
 }
 
-function jobIdFor(phone: string): string {
-  return `lead-fu-${phone.replace(/\D/g, '')}`
+/**
+ * Um id por toque. Com um id só por lead, o worker agendava o toque seguinte
+ * com o id do job que ele mesmo estava processando: o remove falha (job ativo)
+ * e o add com id repetido é ignorado sem erro, então nenhum lead passava do
+ * toque 1 (01/10: 58 leads parados no passo 1 em Mentoria, JDL e GPS).
+ */
+const MAX_TOQUES = 10
+
+function jobIdFor(phone: string, attempt: number): string {
+  return `lead-fu-${phone.replace(/\D/g, '')}-t${attempt}`
+}
+
+/** Remove os toques pendentes do lead (e o id antigo, sem número de toque). */
+async function removerToques(queue: Queue, phone: string): Promise<void> {
+  const ids = [`lead-fu-${phone.replace(/\D/g, '')}`]
+  for (let t = 1; t <= MAX_TOQUES; t++) ids.push(jobIdFor(phone, t))
+  // Falha só no job ativo (o toque que está rodando agora) — ok ignorar.
+  await Promise.all(ids.map((id) => queue.remove(id).catch(() => null)))
 }
 
 // ─── API pública ─────────────────────────────────────────────────────────────
@@ -165,11 +181,11 @@ export async function scheduleLeadFollowup(
   if (hours === undefined) return
 
   const queue = getQueue()
-  const jobId = jobIdFor(phone)
+  const jobId = jobIdFor(phone, attempt)
   let delayMs = regua.corridas ? Math.round(hours * 3_600_000) : calculateBusinessHourDelayMs(hours)
   if (campanha === 'gps') delayMs = ajustarParaJanelaDoDia(delayMs)
 
-  await queue.remove(jobId).catch(() => null)
+  await removerToques(queue, phone)
   await queue.add('touch', { phone, attempt, campanha } satisfies LeadFollowupData, { jobId, delay: delayMs })
 
   logger.child({ context: 'lead-followup' }).info(
@@ -185,7 +201,7 @@ export async function scheduleLeadFollowup(
 export async function cancelLeadFollowup(phone: string): Promise<void> {
   if (!_queue && !env.LEAD_FOLLOWUP_ENABLED) return
   try {
-    await getQueue().remove(jobIdFor(phone))
+    await removerToques(getQueue(), phone)
   } catch {
     /* job pode não existir — ok */
   }
