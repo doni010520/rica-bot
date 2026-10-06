@@ -74,8 +74,11 @@ export async function coletarFunilSemanal(pool: Pool): Promise<Linha[]> {
             count(*) FILTER (WHERE f.first_rica_message_at IS NOT NULL)::int AS contatou,
             count(*) FILTER (WHERE f.first_lead_reply_at IS NOT NULL)::int AS responderam,
             count(*) FILTER (WHERE f.etapa NOT IN ('novo','rica_iniciou','engajou','nutricao','nao_contatar','perdido') OR f.dor_principal IS NOT NULL)::int AS diagnostico,
-            count(*) FILTER (WHERE f.dor_principal IS NOT NULL)::int AS dor,
-            count(*) FILTER (WHERE f.qualified_at IS NOT NULL)::int AS qualificados,
+            -- Funil acumulado: quem passou de uma etapa conta nela. No GPS a Rica manda o
+            -- link sem marcar qualified_at e o relatório de 05/10 saiu "Qualificados: 0" e
+            -- "Links da agenda: 4" (a Maria questionou).
+            count(*) FILTER (WHERE f.dor_principal IS NOT NULL OR f.qualified_at IS NOT NULL OR f.scheduling_options_shown_at IS NOT NULL OR f.link_agenda_enviado_at IS NOT NULL OR f.meeting_booked_at IS NOT NULL OR f.handoff_at IS NOT NULL)::int AS dor,
+            count(*) FILTER (WHERE f.qualified_at IS NOT NULL OR f.scheduling_options_shown_at IS NOT NULL OR f.link_agenda_enviado_at IS NOT NULL OR f.meeting_booked_at IS NOT NULL OR f.handoff_at IS NOT NULL)::int AS qualificados,
             count(*) FILTER (WHERE f.meeting_booked_at IS NOT NULL)::int AS reunioes,
             count(*) FILTER (WHERE f.handoff_at IS NOT NULL)::int AS transferidos,
             count(*) FILTER (WHERE f.link_enviado_at IS NOT NULL)::int AS links,
