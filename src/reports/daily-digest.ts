@@ -52,12 +52,15 @@ async function collectDigest(pool: Pool): Promise<DigestData> {
        WHERE organization_id = $1 AND source = 'whatsapp' AND created_at >= ${INICIO_DO_DIA}`,
       [org],
     ),
+    // Encaminhados HOJE, pela data do encaminhamento: em 06/10 um lead que chegou
+    // no dia 05 e foi passado à Maria no dia 06 saiu como "Encaminhados: 0" (ela
+    // reclamou no grupo). assigned_at nulo = deal antigo, cai na data de criação.
     pool.query(
       `SELECT d.contact_name, d.contact_phone, u.name AS exec
        FROM deals d JOIN users u ON u.id = d.owner_id
        WHERE d.organization_id = $1 AND d.source = 'whatsapp'
-         AND d.owner_id IS NOT NULL AND d.created_at >= ${INICIO_DO_DIA}
-       ORDER BY d.created_at`,
+         AND d.owner_id IS NOT NULL AND COALESCE(d.assigned_at, d.created_at) >= ${INICIO_DO_DIA}
+       ORDER BY COALESCE(d.assigned_at, d.created_at)`,
       [org],
     ),
     pool.query(
