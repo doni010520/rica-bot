@@ -72,9 +72,17 @@ export async function clearDedup(phone: string, product: string): Promise<void> 
   }
 }
 
-function buildDedupKey(phone: string, product: string): string {
+export function buildDedupKey(phone: string, product: string): string {
   const cleanPhone = phone.replace(/\D/g, '').slice(-8) // últimos 8 dígitos
-  const cleanProduct = product.toLowerCase().replace(/\s+/g, '_').slice(0, 20)
+  // Acento e maiúscula não diferenciam produto: em 05/10 a Rica avisou a Maria
+  // duas vezes do mesmo lead, com "Diagnóstico" e depois "Diagnostico".
+  const cleanProduct = product
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')
+    .slice(0, 20)
   return `dedup:notif:${cleanPhone}:${cleanProduct}`
 }
 
