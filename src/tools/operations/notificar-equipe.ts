@@ -24,6 +24,9 @@ import { logger } from '../../observability/logger.js'
 import { nowFormatted } from '../../lib/timezone.js'
 import { scheduleExecutiveFollowup } from '../../followup/executive-followup.js'
 import { logOutbound } from '../../observability/outbound-log.js'
+import { getPool } from '../../lib/db.js'
+import { loadChatHistory } from '../../memory/postgres-chat.js'
+import { avaliarSeELead, respostaNaoELead } from '../../qualificacao/porta-lead.js'
 
 const NotificarInputSchema = z.object({
   nome: z.string().describe('Nome completo do lead'),
@@ -54,6 +57,19 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
       const { nome, telefone, produto, mensagem, empresa, email, deal_id, resumo_diagnostico } = params
 
       log.info({ produto }, 'Notificar equipe chamado')
+
+      // 0. Porta do lead — quem claramente não é cliente não vira "lead quentinho"
+      //    (ver src/qualificacao/porta-lead.ts). Fail-open: erro aqui deixa passar.
+      const historico = await loadChatHistory(getPool(), conversationPhone, 30).catch(() => [])
+      const conversa = historico
+        .map((m) => `${m.role === 'human' ? 'LEAD' : 'RICA'}: ${m.content}`)
+        .concat(`RESUMO DA RICA AO ENCAMINHAR: ${mensagem}`)
+        .join('\n')
+      const avaliacao = await avaliarSeELead(conversa)
+      if (!avaliacao.ehLead) {
+        log.info({ produto, motivo: avaliacao.motivo }, '⛔ notificar_equipe barrado: não é cliente possível')
+        return respostaNaoELead(avaliacao.motivo)
+      }
 
       // 1. Dedup — bloqueia duplicatas
       const canNotify = await shouldNotify(telefone, produto)

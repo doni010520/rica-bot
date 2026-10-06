@@ -37,6 +37,15 @@ vi.mock('../../src/followup/executive-followup.js', () => ({
   scheduleExecutiveFollowup: vi.fn().mockResolvedValue(undefined),
 }))
 
+// Porta do lead — sem banco nem OpenAI nos testes; aqui todo mundo é lead.
+// O caso barrado é testado em tests/unit/porta-lead.test.ts.
+vi.mock('../../src/lib/db.js', () => ({ getPool: vi.fn(() => ({ query: vi.fn().mockResolvedValue({ rows: [] }) })) }))
+vi.mock('../../src/memory/postgres-chat.js', () => ({ loadChatHistory: vi.fn().mockResolvedValue([]) }))
+vi.mock('../../src/qualificacao/porta-lead.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/qualificacao/porta-lead.js')>()),
+  avaliarSeELead: vi.fn().mockResolvedValue({ ehLead: true, motivo: 'teste' }),
+}))
+
 function makeOkResponse() {
   return Promise.resolve({ ok: true, status: 200, text: () => Promise.resolve('') } as Response)
 }

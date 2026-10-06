@@ -28,6 +28,7 @@ import { logger } from '../observability/logger.js'
 import { buildSystemPrompt, type CrmContext } from './prompt.js'
 import { buildAllTools } from '../tools/index.js'
 import { detectarCampanhaDoAnuncio, blocoFunilParaPrompt, type FunilRow } from '../funil/funil.js'
+import { avaliarSeELead, respostaNaoELead } from '../qualificacao/porta-lead.js'
 
 /** Tools que podem rodar de verdade: leitura, sem efeito no mundo. */
 const TOOLS_SEGURAS = new Set(['buscar_documentos'])
@@ -60,6 +61,7 @@ export function tolsDeSimulacao(
   phone: string,
   pool: Pool,
   registro: ChamadaDeTool[],
+  conversa = '',
 ): Record<string, CoreTool> {
   const reais = buildAllTools(phone, pool) as Record<string, CoreTool>
   const saida: Record<string, CoreTool> = {}
@@ -88,6 +90,16 @@ export function tolsDeSimulacao(
       parameters: (original as any).parameters,
       execute: async (args: unknown) => {
         registro.push({ tool: nome, argumentos: args, executada: false })
+        // A porta do lead roda de verdade (só lê): sem ela o simulador diria que
+        // encaminhou quem a produção barraria.
+        if (nome === 'notificar_equipe') {
+          const resumo = String((args as { mensagem?: string })?.mensagem ?? '')
+          const avaliacao = await avaliarSeELead(`${conversa}\nRESUMO DA RICA AO ENCAMINHAR: ${resumo}`)
+          if (!avaliacao.ehLead) {
+            registro[registro.length - 1] = { tool: 'notificar_equipe (barrado: não é lead)', argumentos: args, executada: false }
+            return respostaNaoELead(avaliacao.motivo)
+          }
+        }
         return {
           success: true,
           simulado: true,
@@ -142,7 +154,8 @@ export async function simularTurno(
 
   const systemPrompt = buildSystemPrompt(crm, TELEFONE_SIMULADO, nome)
   const registro: ChamadaDeTool[] = []
-  const tools = comTools ? tolsDeSimulacao(TELEFONE_SIMULADO, pool, registro) : {}
+  const conversa = mensagens.map((m) => `${m.papel === 'lead' ? 'LEAD' : 'RICA'}: ${m.texto}`).join('\n')
+  const tools = comTools ? tolsDeSimulacao(TELEFONE_SIMULADO, pool, registro, conversa) : {}
 
   const historico = mensagens.map((m) => ({
     role: m.papel === 'lead' ? ('user' as const) : ('assistant' as const),
