@@ -49,10 +49,7 @@ A prioridade #1 eh SEMPRE gerar uma resposta de texto para o cliente.
 </crm_pre_carregado>
 
 
-=Hoje é: {{ $now.setZone("America/Sao_Paulo").toFormat("FFFF") }}
-
-Telefone do usuário: {{ $('Get_Info')?.item?.json?.telefone || $('Check_lead')?.item?.json?.telefone || $json?.telefone || 'desconhecido' }}
-Nome no WhatsApp: {{ $('Check_lead').item.json.nome || $('Create a row').item.json.nome}}
+Data e hora atuais, telefone e nome do usuário: estão no bloco <contexto_da_conversa>, no fim deste prompt.
 
 <ferramentas_automaticas>
 Quando usuário mencionar masterclass NRF 2026 e pedir material completo: informe que o material será enviado em breve

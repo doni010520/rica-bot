@@ -50,6 +50,21 @@ export type RicaOutput = {
 }
 
 /** Alguma tool chegou a ser chamada em algum passo? Exportado para teste. */
+/**
+ * Tokens de entrada e quanto veio do cache da OpenAI, somando todas as etapas do
+ * turno (cada tool chamada é uma nova requisição com o prompt inteiro). Meta após
+ * a reorganização do prompt (06/10/2026): mais de 70% em cache.
+ */
+export function usoDoCache(r: Awaited<ReturnType<typeof generateText>>) {
+  let entrada = 0
+  let cache = 0
+  for (const s of r.steps ?? []) {
+    entrada += s.usage?.promptTokens ?? 0
+    cache += Number(s.providerMetadata?.openai?.cachedPromptTokens ?? 0)
+  }
+  return { tokensEntrada: entrada, tokensCache: cache, pctCache: entrada ? Math.round((cache / entrada) * 100) : 0 }
+}
+
 export function houveToolCall(r: Awaited<ReturnType<typeof generateText>>): boolean {
   return (r.steps ?? []).some((passo) => (passo.toolCalls ?? []).length > 0)
 }
@@ -148,7 +163,7 @@ export async function runRica(input: RicaInput, pool: Pool): Promise<RicaOutput>
     return { text: '', usedFallback: true, steps: stepCount, ranTool }
   }
 
-  log.info({ textLen: rawText.length, stepCount }, 'Agent respondeu')
+  log.info({ textLen: rawText.length, stepCount, ...usoDoCache(result) }, 'Agent respondeu')
 
   // 5. Salva turno na memória
   await saveChatTurn(pool, phone, userMessage, rawText)
