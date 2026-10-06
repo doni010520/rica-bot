@@ -43,13 +43,13 @@ describe('notificar_equipe: porta do lead', () => {
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('a avaliação recebe a conversa e o resumo da Rica', async () => {
+  it('a avaliação recebe só as falas do lead', async () => {
     avaliar.mockResolvedValue({ ehLead: true, motivo: 'ok' })
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (buildNotificarEquipeTool('558186069303') as any).execute(params, {})
     const texto = avaliar.mock.calls[0][0] as string
     expect(texto).toContain('LEAD: Não é padaria')
-    expect(texto).toContain('RESUMO DA RICA AO ENCAMINHAR: quer montar oficina')
+    expect(texto).not.toContain('Entendi!')
     expect(incr).toHaveBeenCalled()
   })
 

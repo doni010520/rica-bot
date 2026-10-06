@@ -61,11 +61,11 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
       // 0. Porta do lead — quem claramente não é cliente não vira "lead quentinho"
       //    (ver src/qualificacao/porta-lead.ts). Fail-open: erro aqui deixa passar.
       const historico = await loadChatHistory(getPool(), conversationPhone, 30).catch(() => [])
-      const conversa = historico
-        .map((m) => `${m.role === 'human' ? 'LEAD' : 'RICA'}: ${m.content}`)
-        .concat(`RESUMO DA RICA AO ENCAMINHAR: ${mensagem}`)
+      const falasDoLead = historico
+        .filter((m) => m.role === 'human')
+        .map((m) => `LEAD: ${m.content}`)
         .join('\n')
-      const avaliacao = await avaliarSeELead(conversa)
+      const avaliacao = await avaliarSeELead(falasDoLead)
       if (!avaliacao.ehLead) {
         log.info({ produto, motivo: avaliacao.motivo }, '⛔ notificar_equipe barrado: não é cliente possível')
         return respostaNaoELead(avaliacao.motivo)

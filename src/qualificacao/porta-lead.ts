@@ -24,23 +24,33 @@ import { logger } from '../observability/logger.js'
 
 export type Avaliacao = { ehLead: boolean; motivo: string }
 
-const INSTRUCAO = `Você avalia conversas de WhatsApp da Rica, atendente da Sucesso no Resultado,
-uma consultoria que ajuda empresas a vender mais e lucrar mais (consultoria, diagnóstico,
-mentoria, treinamentos, a plataforma GPS e o app Alexy).
+// Validada em 06/10/2026 direto no modelo: caso Dado → false; padaria, oficina
+// funcionando e negócio a abrir com capital próprio → true.
+const INSTRUCAO = `Você avalia se quem conversa com a Rica, atendente da Sucesso no Resultado, é um CLIENTE POSSÍVEL.
+A Sucesso é uma consultoria paga: ajuda empresas a vender mais e lucrar mais (consultoria,
+diagnóstico, mentoria, treinamentos, a plataforma GPS e o app Alexy). Ela não empresta, não
+doa, não financia e não fornece equipamentos.
 
-Responda se a pessoa é um CLIENTE POSSÍVEL, isto é, alguém que tem um negócio funcionando
-(de qualquer ramo) ou que vai abrir um com recurso próprio, e que quer um desses serviços.
+Você recebe só as falas da pessoa. Decida pelo que ELA disse.
 
-Marque ehLead = false SOMENTE quando a conversa deixa claro um destes casos:
-- pede dinheiro, doação, empréstimo, financiamento ou patrocínio;
+ehLead = true quando a pessoa:
+- tem um negócio funcionando, de qualquer ramo (padaria, mercado, oficina, loja...); ou
+- vai abrir um negócio e mostra que tem recurso próprio (ponto, capital, investimento reservado).
+
+ehLead = false quando a pessoa:
+- pede dinheiro, doação, empréstimo, financiamento, patrocínio ou que a empresa pague/compre algo para ela;
+- ainda não tem o negócio E fala que lhe faltam o básico (terreno, equipamentos, dinheiro) sem mostrar recurso para contratar;
 - procura emprego ou vaga;
-- não tem negócio e também não tem recurso nem plano de contratar um serviço;
 - é engano, trote ou assunto sem relação com empresa.
 
-Em qualquer dúvida, ehLead = true. Ramo diferente de padaria NÃO desqualifica.`
+Se nada disso estiver claro, ehLead = true.`
 
-/** Avalia o texto da conversa (linhas "LEAD: ..." / "RICA: ..."). Nunca lança. */
-export async function avaliarSeELead(conversa: string): Promise<Avaliacao> {
+/**
+ * Avalia as falas do lead (linhas "LEAD: ..."). Só as falas DELE: com as
+ * respostas da Rica junto, que tratavam o caso Dado como "oficina", a checagem
+ * aprovava. Nunca lança.
+ */
+export async function avaliarSeELead(falasDoLead: string): Promise<Avaliacao> {
   const log = logger.child({ fn: 'avaliarSeELead' })
   try {
     const { object } = await generateObject({
@@ -51,7 +61,7 @@ export async function avaliarSeELead(conversa: string): Promise<Avaliacao> {
         motivo: z.string().describe('Uma frase curta, em português, explicando a decisão'),
       }),
       system: INSTRUCAO,
-      prompt: `Conversa (mais recente no fim):\n\n${conversa.slice(-12000)}`,
+      prompt: `Falas do lead (mais recente no fim):\n\n${falasDoLead.slice(-12000)}`,
     })
     log.info(object, object.ehLead ? 'Porta do lead: é cliente possível' : '⛔ Porta do lead: não é cliente possível')
     return object
