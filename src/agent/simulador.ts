@@ -89,13 +89,15 @@ export function tolsDeSimulacao(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       parameters: (original as any).parameters,
       execute: async (args: unknown) => {
-        registro.push({ tool: nome, argumentos: args, executada: false })
+        const posicao = registro.push({ tool: nome, argumentos: args, executada: false }) - 1
         // A porta do lead roda de verdade (só lê): sem ela o simulador diria que
         // encaminhou quem a produção barraria.
         if (nome === 'notificar_equipe') {
           const avaliacao = await avaliarSeELead(falasDoLead)
           if (!avaliacao.ehLead) {
-            registro[registro.length - 1] = { tool: 'notificar_equipe (barrado: não é lead)', argumentos: args, executada: false }
+            // Pela posição guardada: com duas chamadas em paralelo, "a última"
+            // seria a da outra chamada.
+            registro[posicao] = { tool: 'notificar_equipe (barrado: não é lead)', argumentos: args, executada: false }
             return respostaNaoELead(avaliacao.motivo)
           }
         }
