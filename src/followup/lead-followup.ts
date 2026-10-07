@@ -74,8 +74,10 @@ const REGUA: Record<string, { horas: number[]; corridas: boolean }> = {
 const CAMPANHAS_COM_REGUA = new Set(['mentoria', 'jdl', 'gps'])
 
 /**
- * GPS: o toque só sai entre 8h e 20h de Recife. Fora disso, empurra para as
- * 8h seguintes — mensagem de padaria às 2h da manhã não resgata ninguém.
+ * Todo toque só sai entre 8h e 20h de Recife. Fora disso, empurra para as 8h
+ * seguintes — mensagem de padaria às 2h da manhã não resgata ninguém. Era só do
+ * GPS; em 07/10 a Jéssica viu toques da Mentoria e da Jornada saindo de 0h a 2h
+ * (42 de 109 e 8 de 15 na semana fora do horário).
  */
 export function ajustarParaJanelaDoDia(delayMs: number, agora = Date.now()): number {
   const envio = agora + delayMs
@@ -142,10 +144,15 @@ function jobIdFor(phone: string, attempt: number): string {
   return `lead-fu-${phone.replace(/\D/g, '')}-t${attempt}`
 }
 
+/** Toque que caiu fora da janela e foi adiado para as 8h (id próprio: o original está ativo). */
+function jobIdAdiado(phone: string, attempt: number): string {
+  return `${jobIdFor(phone, attempt)}-adiado`
+}
+
 /** Remove os toques pendentes do lead (e o id antigo, sem número de toque). */
 async function removerToques(queue: Queue, phone: string): Promise<void> {
   const ids = [`lead-fu-${phone.replace(/\D/g, '')}`]
-  for (let t = 1; t <= MAX_TOQUES; t++) ids.push(jobIdFor(phone, t))
+  for (let t = 1; t <= MAX_TOQUES; t++) ids.push(jobIdFor(phone, t), jobIdAdiado(phone, t))
   // Falha só no job ativo (o toque que está rodando agora) — ok ignorar.
   await Promise.all(ids.map((id) => queue.remove(id).catch(() => null)))
 }
@@ -183,7 +190,7 @@ export async function scheduleLeadFollowup(
   const queue = getQueue()
   const jobId = jobIdFor(phone, attempt)
   let delayMs = regua.corridas ? Math.round(hours * 3_600_000) : calculateBusinessHourDelayMs(hours)
-  if (campanha === 'gps') delayMs = ajustarParaJanelaDoDia(delayMs)
+  delayMs = ajustarParaJanelaDoDia(delayMs)
 
   await removerToques(queue, phone)
   await queue.add('touch', { phone, attempt, campanha } satisfies LeadFollowupData, { jobId, delay: delayMs })
@@ -248,6 +255,15 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
   const campanha = data.campanha ?? 'padrao'
   const regua = reguaDa(campanha)
   const log = followupLogger(phone.slice(-4))
+
+  // Fora das 8h-20h (toque agendado antes da janela valer para todas as
+  // campanhas): adia para as 8h em vez de mandar de madrugada.
+  const ateAJanela = ajustarParaJanelaDoDia(0)
+  if (ateAJanela > 0) {
+    await getQueue().add('touch', data, { jobId: jobIdAdiado(phone, attempt), delay: ateAJanela + 60_000 })
+    log.info({ attempt, campanha, adiadoH: (ateAJanela / 3_600_000).toFixed(1) }, 'lead-followup: fora do horário — toque adiado para as 8h')
+    return
+  }
 
   // Pediu para não receber mais mensagens → nunca cobra.
   if (await naoContatar(pool, phone)) {
