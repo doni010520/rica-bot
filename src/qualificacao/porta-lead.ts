@@ -24,9 +24,11 @@ import { logger } from '../observability/logger.js'
 
 export type Avaliacao = { ehLead: boolean; motivo: string }
 
-// Validada em 06/10/2026 direto no modelo: caso Dado → false; padaria, oficina
-// funcionando e negócio a abrir com capital próprio → true.
-const INSTRUCAO = `Você avalia se quem conversa com a Rica, atendente da Sucesso no Resultado, é um CLIENTE POSSÍVEL.
+// Validada direto no modelo (06/10 e 08/10/2026): caso Dado e lead que disse
+// "deixa pra outra oportunidade, não vou querer agora" → false; padaria, oficina
+// funcionando, negócio a abrir com capital, quem só pediu informação e quem
+// recusou e depois voltou interessado → true.
+const INSTRUCAO = `Você avalia se quem conversa com a Rica, atendente da Sucesso no Resultado, deve ser ENCAMINHADO como lead para a equipe comercial.
 A Sucesso é uma consultoria paga: ajuda empresas a vender mais e lucrar mais (consultoria,
 diagnóstico, mentoria, treinamentos, a plataforma GPS e o app Alexy). Ela não empresta, não
 doa, não financia e não fornece equipamentos.
@@ -35,14 +37,17 @@ Você recebe só as falas da pessoa. Decida pelo que ELA disse.
 
 ehLead = true quando a pessoa:
 - tem um negócio funcionando, de qualquer ramo (padaria, mercado, oficina, loja...); ou
-- vai abrir um negócio e mostra que tem recurso próprio (ponto, capital, investimento reservado).
+- vai abrir um negócio e mostra que tem recurso próprio (ponto, capital, investimento reservado); ou
+- quer conhecer os serviços, pede preço, proposta ou para falar com alguém da equipe.
 
 ehLead = false quando a pessoa:
+- diz que não quer agora, que deixa para outra oportunidade, que não tem interesse ou que desistiu;
 - pede dinheiro, doação, empréstimo, financiamento, patrocínio ou que a empresa pague/compre algo para ela;
 - ainda não tem o negócio E fala que lhe faltam o básico (terreno, equipamentos, dinheiro) sem mostrar recurso para contratar;
 - procura emprego ou vaga;
 - é engano, trote ou assunto sem relação com empresa.
 
+Se a última fala mostrar interesse de novo depois de uma recusa, vale a última fala.
 Se nada disso estiver claro, ehLead = true.`
 
 /**
@@ -78,10 +83,10 @@ export function respostaNaoELead(motivo: string) {
     nao_e_lead: true,
     motivo,
     message:
-      'NÃO ENCAMINHADO: esta pessoa não é um cliente possível da Sucesso (' + motivo + '). ' +
+      'NÃO ENCAMINHADO para a equipe (' + motivo + '). ' +
       'Não diga que passou os dados nem que alguém vai entrar em contato. ' +
-      'Responda com gentileza que a Sucesso no Resultado é uma consultoria para empresas que já ' +
-      'estão funcionando, que não fazemos financiamento, doação nem contratação, e deixe a porta ' +
-      'aberta para quando ela tiver um negócio.',
+      'Responda com gentileza e de acordo com o motivo: se a pessoa não quer agora, agradeça e ' +
+      'deixe a porta aberta; se pediu dinheiro, emprego ou não tem negócio, explique que a Sucesso ' +
+      'no Resultado é uma consultoria para empresas que já estão funcionando.',
   }
 }
