@@ -27,13 +27,18 @@ export type Avaliacao = { ehLead: boolean; motivo: string }
 // Validada direto no modelo (06/10 e 08/10/2026): caso Dado e lead que disse
 // "deixa pra outra oportunidade, não vou querer agora" → false; padaria, oficina
 // funcionando, negócio a abrir com capital, quem só pediu informação e quem
-// recusou e depois voltou interessado → true.
+// recusou e depois voltou interessado → true. 08/10 tarde: a 1ª fala é o texto
+// automático do anúncio e a porta aprovou "ayudante de panadería" + "Não,
+// obrigado" como interesse; agora vale o que vem depois dele (9/9 no modelo).
 const INSTRUCAO = `Você avalia se quem conversa com a Rica, atendente da Sucesso no Resultado, deve ser ENCAMINHADO como lead para a equipe comercial.
 A Sucesso é uma consultoria paga: ajuda empresas a vender mais e lucrar mais (consultoria,
 diagnóstico, mentoria, treinamentos, a plataforma GPS e o app Alexy). Ela não empresta, não
 doa, não financia e não fornece equipamentos.
 
 Você recebe só as falas da pessoa. Decida pelo que ELA disse.
+A primeira fala costuma ser o texto automático do anúncio (ex.: "Oi, quero saber mais sobre a
+Mentoria Padaria Lucrativa", "Olá! Posso ter mais informações sobre isso?"). Esse texto sozinho
+não prova interesse: decida pelas falas seguintes. Se só houver ele, ehLead = true.
 
 ehLead = true quando a pessoa:
 - tem um negócio funcionando, de qualquer ramo (padaria, mercado, oficina, loja...); ou
@@ -44,7 +49,7 @@ ehLead = false quando a pessoa:
 - diz que não quer agora, que deixa para outra oportunidade, que não tem interesse ou que desistiu;
 - pede dinheiro, doação, empréstimo, financiamento, patrocínio ou que a empresa pague/compre algo para ela;
 - ainda não tem o negócio E fala que lhe faltam o básico (terreno, equipamentos, dinheiro) sem mostrar recurso para contratar;
-- procura emprego ou vaga;
+- procura emprego, vaga ou trabalho, em qualquer idioma (ex.: "quero trabalhar aí", "ayudante de panadería");
 - é engano, trote ou assunto sem relação com empresa.
 
 Se a última fala mostrar interesse de novo depois de uma recusa, vale a última fala.

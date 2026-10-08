@@ -140,7 +140,7 @@ export async function handleWebhook(rawBody: unknown, deps: WebhookHandlerDeps):
   }
 
   // Fluxo normal: enfileira no buffer
-  await getMessageBuffer().push(phone, messageText)
+  await getMessageBuffer().push(phone, messageText, parsed.displayName)
   log.debug({ mediaType: parsed.mediaType }, 'Mensagem no buffer')
 }
 
@@ -215,7 +215,7 @@ export async function handleBufferedMessage(
 
   // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
   //    Passa a 1a mensagem para detectar o funil (ex: GPS nasce no funil GPS)
-  const crm = await preFetchCrm(phone, '', combinedText)
+  const crm = await preFetchCrm(phone, msg.displayName ?? '', combinedText)
 
   // 1.05 GPS JÁ ENTREGUE AO ANDRÉ: depois do agendamento/handoff a Rica sai da
   //      conversa (manual GPS, seção 12). A mensagem vai para o André, que é o
@@ -262,7 +262,7 @@ export async function handleBufferedMessage(
 
   // 4. Executa agent com tools e CrmContext real
   const tools = buildAllTools(phone, deps.pool)
-  const result = await runRica({ phone, displayName: crm.contactName ?? '', userMessage: combinedText, crm, tools }, deps.pool)
+  const result = await runRica({ phone, displayName: crm.contactName || msg.displayName || '', userMessage: combinedText, crm, tools }, deps.pool)
 
   if (result.usedFallback || !result.text) {
     // O texto veio vazio mesmo depois da segunda tentativa. A mensagem depende

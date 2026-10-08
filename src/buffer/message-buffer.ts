@@ -22,6 +22,8 @@ export type BufferedMessage = {
   phone: string
   combinedText: string
   messageCount: number
+  /** Nome do perfil do WhatsApp (pushName) da última mensagem; '' se não veio. */
+  displayName?: string
 }
 
 type MessageHandler = (msg: BufferedMessage) => Promise<void>
@@ -54,11 +56,15 @@ export class MessageBuffer {
     })
   }
 
-  async push(phone: string, text: string): Promise<void> {
+  async push(phone: string, text: string, displayName = ''): Promise<void> {
     const bufferKey = `${BUFFER_KEY_PREFIX}${phone}`
 
     await this.redis.rpush(bufferKey, text)
     await this.redis.expire(bufferKey, BUFFER_TTL_SECONDS)
+    // O nome do perfil do WhatsApp vinha só no webhook e se perdia aqui: o contato
+    // nascia "Sem nome" no CRM (189 de 203 em 2 semanas) e o lead chegava ao André
+    // como "Lead WhatsApp" (08/10).
+    if (displayName) await this.redis.set(`${bufferKey}:nome`, displayName, 'EX', BUFFER_TTL_SECONDS)
 
     // Upsert: remove job anterior e adiciona novo com delay resetado.
     // jobId NÃO pode conter ':' (BullMQ usa como separador interno).
@@ -80,7 +86,8 @@ export class MessageBuffer {
         const bufferKey = `${BUFFER_KEY_PREFIX}${phone}`
 
         const messages = await this.redis.lrange(bufferKey, 0, -1)
-        await this.redis.del(bufferKey)
+        const displayName = (await this.redis.get(`${bufferKey}:nome`)) ?? ''
+        await this.redis.del(bufferKey, `${bufferKey}:nome`)
 
         if (messages.length === 0) {
           logger.debug({ phone: phone.slice(-4) }, 'Buffer vazio — skip')
@@ -90,7 +97,7 @@ export class MessageBuffer {
         const combinedText = messages.join('\n')
         logger.info({ phone: phone.slice(-4), messageCount: messages.length }, 'Buffer processado')
 
-        await handler({ phone, combinedText, messageCount: messages.length })
+        await handler({ phone, combinedText, messageCount: messages.length, displayName })
       },
       { connection: getRedisOpts(), concurrency: 20 },
     )

@@ -83,6 +83,8 @@ const RegisterLeadResponseSchema = z.object({
 export function cleanName(name: string | undefined | null, phone: string): string {
   const n = (name ?? '').trim()
   if (!n) return ''
+  // Placeholders do CRM e da Rica não são nome ("Olá Sem!", "Lead WhatsApp" no aviso ao executivo).
+  if (/^(sem nome|lead whatsapp|desconhecido|\(desconhecido\))$/i.test(n)) return ''
   const nDigits = n.replace(/\D/g, '')
   const pDigits = phone.replace(/\D/g, '')
   // Só dígitos / pontuação de telefone, ou bate com o número → não é nome
