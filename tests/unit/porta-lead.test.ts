@@ -18,6 +18,8 @@ vi.mock('../../src/memory/postgres-chat.js', () => ({
 }))
 const incr = vi.fn()
 vi.mock('../../src/dedup/redis-incr.js', () => ({ shouldNotify: (...a: unknown[]) => incr(...a) }))
+const alertarBarrado = vi.fn()
+vi.mock('../../src/alertas/alertas.js', () => ({ alertarBarrado: (...a: unknown[]) => alertarBarrado(...a) }))
 vi.mock('../../src/lib/crm-client.js', () => ({ crmRequest: vi.fn().mockResolvedValue({ success: true }) }))
 vi.mock('../../src/followup/executive-followup.js', () => ({ scheduleExecutiveFollowup: vi.fn() }))
 
@@ -41,6 +43,7 @@ describe('notificar_equipe: porta do lead', () => {
     expect(r.message).toMatch(/Não diga que passou os dados/)
     expect(incr).not.toHaveBeenCalled()
     expect(global.fetch).not.toHaveBeenCalled()
+    expect(alertarBarrado).toHaveBeenCalledWith('558186069303', 'pede dinheiro e não tem negócio')
   })
 
   it('a avaliação recebe só as falas do lead', async () => {

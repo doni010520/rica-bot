@@ -166,6 +166,10 @@ const EnvSchema = z.object({
   // Sem valor, só os executivos (EXEC_*_PHONE) ficam protegidos.
   TEAM_PHONES: z.string().optional().default(''),
 
+  // Quem recebe os alertas de divergência da Rica (src/alertas/alertas.ts).
+  // Telefones com DDI 55, separados por vírgula. Padrão: Jéssica (pediu em 08/10).
+  ALERTAS_PHONES: z.string().optional().default('558199880892'),
+
   // ── Campanhas comerciais (força-tarefa set/2026) ─────────────────────────
   // Jornada Online — suporte: quem recebe aviso de ACESSO e de REEMBOLSO.
   // Nomes e telefones "Nome:55DDDNUMERO" separados por vírgula. Entram também

@@ -27,6 +27,7 @@ import { logOutbound } from '../../observability/outbound-log.js'
 import { getPool } from '../../lib/db.js'
 import { loadChatHistory } from '../../memory/postgres-chat.js'
 import { avaliarSeELead, respostaNaoELead } from '../../qualificacao/porta-lead.js'
+import { alertarBarrado } from '../../alertas/alertas.js'
 
 const NotificarInputSchema = z.object({
   nome: z.string().describe('Nome completo do lead'),
@@ -68,6 +69,7 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
       const avaliacao = await avaliarSeELead(falasDoLead)
       if (!avaliacao.ehLead) {
         log.info({ produto, motivo: avaliacao.motivo }, '⛔ notificar_equipe barrado: não é cliente possível')
+        void alertarBarrado(conversationPhone, avaliacao.motivo)
         return respostaNaoELead(avaliacao.motivo)
       }
 

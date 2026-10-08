@@ -24,6 +24,7 @@ import { getMessageBuffer, type BufferedMessage } from '../buffer/message-buffer
 import { detectAdminCommand } from '../commands/admin.js'
 import { clearChatHistory, loadChatHistory, saveChatTurn, historyToMessages } from '../memory/postgres-chat.js'
 import { isJobCandidate, notifyHR } from '../candidato/detect.js'
+import { vigiarPrimeiraMensagem, alertarFalha } from '../alertas/alertas.js'
 import { buildAllTools } from '../tools/index.js'
 import { runRica } from '../agent/rica.js'
 import { tryCopiloto } from '../copiloto/whatsapp-copiloto.js'
@@ -216,6 +217,8 @@ export async function handleBufferedMessage(
   // 1. Pre-fetch CRM (Pre_BuscarContato / Pre_RegistrarLead)
   //    Passa a 1a mensagem para detectar o funil (ex: GPS nasce no funil GPS)
   const crm = await preFetchCrm(phone, msg.displayName ?? '', combinedText)
+  // Contato novo: vigia mensagens fora do comum chegando em série (alerta à Jéssica).
+  if (!crm.exists) void vigiarPrimeiraMensagem(phone, combinedText)
 
   // 1.05 GPS JÁ ENTREGUE AO ANDRÉ: depois do agendamento/handoff a Rica sai da
   //      conversa (manual GPS, seção 12). A mensagem vai para o André, que é o
@@ -275,6 +278,7 @@ export async function handleBufferedMessage(
     } else {
       await sendFallbackMessage(phone, crm.dealId)
       log.warn('Fallback enviado')
+      void alertarFalha(phone, 'resposta vazia nas duas tentativas')
     }
     return
   }
