@@ -30,6 +30,8 @@ export type Avaliacao = { ehLead: boolean; motivo: string }
 // recusou e depois voltou interessado → true. 08/10 tarde: a 1ª fala é o texto
 // automático do anúncio e a porta aprovou "ayudante de panadería" + "Não,
 // obrigado" como interesse; agora vale o que vem depois dele (9/9 no modelo).
+// 13/10: a varredura da régua leu "Mas tarde, estou fazendo compras" (lead de
+// verdade) como recusa; adiar passou a ser lead explicitamente (12/12).
 const INSTRUCAO = `Você avalia se quem conversa com a Rica, atendente da Sucesso no Resultado, deve ser ENCAMINHADO como lead para a equipe comercial.
 A Sucesso é uma consultoria paga: ajuda empresas a vender mais e lucrar mais (consultoria,
 diagnóstico, mentoria, treinamentos, a plataforma GPS e o app Alexy). Ela não empresta, não
@@ -52,6 +54,7 @@ ehLead = false quando a pessoa:
 - procura emprego, vaga ou trabalho, em qualquer idioma (ex.: "quero trabalhar aí", "ayudante de panadería");
 - é engano, trote ou assunto sem relação com empresa.
 
+Adiar NÃO é recusar: "mais tarde", "depois eu vejo", "agora estou ocupado", "tô fazendo compras" → ehLead = true.
 Se a última fala mostrar interesse de novo depois de uma recusa, vale a última fala.
 Se nada disso estiver claro, ehLead = true.`
 
