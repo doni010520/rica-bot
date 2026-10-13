@@ -105,6 +105,18 @@ export async function alertarBarrado(phone: string, motivo: string): Promise<voi
   )
 }
 
+/** 4. Lead encerrado como perdido antes de um follow-up (pediu para parar, recusou, procura emprego). */
+export async function alertarPerdido(phone: string, motivo: string): Promise<void> {
+  await alertar(
+    `perdido:${phone}`,
+    7 * 24 * 3600,
+    `🛑 *Rica — lead encerrado como perdido*\n\n` +
+      `https://wa.me/${phone.replace(/\D/g, '')} saiu da régua de follow-up e foi marcado como perdido no CRM:\n` +
+      `_${motivo}_\n\n` +
+      `Se não for o caso, é só reabrir o negócio no CRM.`,
+  )
+}
+
 /** 3. A Rica não conseguiu responder e mandou a mensagem de fallback. */
 export async function alertarFalha(phone: string, detalhe: string): Promise<void> {
   await alertar(

@@ -39,6 +39,8 @@ import { crmRequest } from '../lib/crm-client.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { calculateBusinessHourDelayMs } from './executive-followup.js'
 import { funilAtual, naoContatar, atualizarFunil, ETAPAS_POS_HANDOFF, type Campanha } from '../funil/funil.js'
+import { avaliarSeELead } from '../qualificacao/porta-lead.js'
+import { encerrarComoPerdido } from '../qualificacao/encerrar-lead.js'
 
 // ─── config ──────────────────────────────────────────────────────────────────
 
@@ -309,6 +311,16 @@ async function processLeadFollowup(data: LeadFollowupData, pool: Pool): Promise<
   const last = history[history.length - 1]
   if (last?.role === 'human') {
     log.info('lead-followup: cliente falou por último — skip (será reagendado após resposta)')
+    return
+  }
+
+  // 3.5 Quem pediu para parar, recusou ou procura emprego sai da régua ANTES do
+  //     toque, mesmo que a Rica não tenha chamado nao_contatar (src/qualificacao/
+  //     encerrar-lead.ts). Mesma checagem da porta do lead; fail-open.
+  const humanas = history.filter((m) => m.role === 'human')
+  const avaliacao = await avaliarSeELead(humanas.map((m) => `LEAD: ${m.content}`).join('\n'))
+  if (!avaliacao.ehLead) {
+    await encerrarComoPerdido(pool, phone, avaliacao.motivo, campanha, humanas.at(-1)?.content ?? '')
     return
   }
 
