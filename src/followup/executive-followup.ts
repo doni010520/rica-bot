@@ -26,6 +26,7 @@ import { sendWhatsApp } from '../uazapi/client.js'
 import { EXECUTIVES, resolveExecutiveByName } from '../routing/executives.config.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
+import { enviarParaGestora } from '../routing/gestao.js'
 
 // ─── tipos ───────────────────────────────────────────────────────────────────
 
@@ -220,7 +221,7 @@ async function processExecutiveFollowup(data: ExecFollowupData): Promise<void> {
       `⏰ Cobrança automática ${env.EXEC_FOLLOWUP_DELAY_HOURS}h após encaminhamento`
 
     try {
-      await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, mhMessage)
+      await enviarParaGestora(mhMessage)
     } catch (err) {
       log.warn({ err }, 'Falha ao enviar cópia gestora da cobrança')
       // Não faz throw — a cobrança principal já foi enviada

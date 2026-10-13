@@ -21,6 +21,7 @@ import { crmRequest } from '../lib/crm-client.js'
 import { scheduleExecutiveFollowup } from '../followup/executive-followup.js'
 import { cancelLeadFollowup } from '../followup/lead-followup.js'
 import { atualizarFunil, funilAtual, type CamposFunil, type Campanha } from './funil.js'
+import { enviarParaGestora } from '../routing/gestao.js'
 
 export type Ficha = CamposFunil & { produto?: string | undefined }
 
@@ -222,7 +223,7 @@ export async function handoffEstruturado(
       `🔥 ${ficha.dor_principal || 'dor não registrada'}\n` +
       `➡️ ${exec.name}\n` +
       `${reuniao.tipo === 'agendada' ? `📅 ${reuniao.rotulo}` : `⚠️ ${reuniao.tipo.replace(/_/g, ' ')}`}`
-    await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, copia, { crmSender: null }).catch(() => {})
+    await enviarParaGestora(copia, { crmSender: null }).catch(() => {})
   }
 
   await crmRequest('/api/crm/deals/assign-owner-by-phone', {

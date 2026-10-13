@@ -20,10 +20,9 @@ import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
-import { sendWhatsApp } from '../uazapi/client.js'
-import { EXECUTIVES } from '../routing/executives.config.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
 import { pendenciasDoDia } from '../funil/pendencias.js'
+import { enviarParaGestora } from '../routing/gestao.js'
 
 const MAX_LIST = 12 // máximo de itens por lista no WhatsApp
 
@@ -237,7 +236,7 @@ export async function runDailyDigest(pool: Pool): Promise<void> {
     const data = await collectDigest(pool)
     const tip = await generateDailyTip(data)
     const message = formatDigest(data, tip) + formatPendencias(await pendenciasDoDia(pool))
-    await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, message)
+    await enviarParaGestora(message)
     log.info(
       { leadsNovos: data.leadsNovos, distribuidos: data.distribuidos.length, semDono: data.semDono.length },
       '📊 Resumo diário enviado à gestora',

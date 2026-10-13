@@ -14,8 +14,7 @@ import { generateText } from 'ai'
 import { openai } from '@ai-sdk/openai'
 import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
-import { sendWhatsApp } from '../uazapi/client.js'
-import { EXECUTIVES } from '../routing/executives.config.js'
+import { enviarParaGestora } from '../routing/gestao.js'
 
 let _cronTask: ReturnType<typeof cron.schedule> | null = null
 
@@ -144,7 +143,7 @@ export async function runWeeklyInsights(pool: Pool): Promise<void> {
       return
     }
     const msg = `🔎 *Rica — Análise da semana (gargalos)*\n\n${analise}`
-    await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, msg)
+    await enviarParaGestora(msg)
     log.info('Análise semanal de gargalos enviada à gestora')
   } catch (err) {
     log.error({ err }, 'Falha ao gerar/enviar a análise semanal')

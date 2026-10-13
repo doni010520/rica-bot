@@ -26,6 +26,7 @@ import { mapDDDToRegion } from './region-mapper.js'
 import { crmRequest } from '../lib/crm-client.js'
 import { scheduleExecutiveFollowup } from '../followup/executive-followup.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
+import { enviarParaGestora } from './gestao.js'
 
 export type EncaminharLeadInput = {
   telefone: string
@@ -122,7 +123,7 @@ export async function encaminharLead(input: EncaminharLeadInput): Promise<Encami
       `➡️ *Direcionado para:* ${exec.name}\n` +
       `📋 *Motivo:* ${motivo}\n\n` +
       `⏰ ${now}`
-    await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, mgrMsg).catch((err) => log.warn({ err }, 'cópia gestora falhou'))
+    await enviarParaGestora(mgrMsg).catch((err) => log.warn({ err }, 'cópia gestora falhou'))
   }
 
   // 5. Define o dono no CRM (resolve por email)

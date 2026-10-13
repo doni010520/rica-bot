@@ -17,6 +17,7 @@ import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
 import { sendWhatsApp } from '../uazapi/client.js'
 import { parseContatos } from '../routing/executives.config.js'
+import { copiasDaGestora } from '../routing/gestao.js'
 
 const NOME: Record<string, string> = {
   mentoria: 'Mentoria Coletiva',
@@ -139,8 +140,11 @@ export async function runFunilSemanal(pool: Pool): Promise<void> {
   const log = logger.child({ context: 'funil-semanal' })
   try {
     const texto = formatarFunilSemanal(await coletarFunilSemanal(pool))
-    for (const c of parseContatos(env.FUNIL_SEMANAL_CONTATOS)) {
-      await sendWhatsApp(c.phone, texto, { crmSender: null }).catch((err) => log.warn({ err }, 'envio do painel falhou'))
+    const destinos = parseContatos(env.FUNIL_SEMANAL_CONTATOS).map((c) => c.phone.replace(/\D/g, ''))
+    // Quem acompanha a gestora recebe também (se já não estiver na lista).
+    for (const p of copiasDaGestora()) if (!destinos.some((d) => d.slice(-8) === p.slice(-8))) destinos.push(p)
+    for (const phone of destinos) {
+      await sendWhatsApp(phone, texto, { crmSender: null }).catch((err) => log.warn({ err }, 'envio do painel falhou'))
     }
     log.info('📈 Painel semanal do funil enviado')
   } catch (err) {

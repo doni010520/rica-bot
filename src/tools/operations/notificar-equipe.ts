@@ -29,6 +29,7 @@ import { loadChatHistory } from '../../memory/postgres-chat.js'
 import { avaliarSeELead, respostaNaoELead, respostaUseAgenda, CAMPANHAS_COM_AGENDA } from '../../qualificacao/porta-lead.js'
 import { funilAtual, ETAPAS_POS_HANDOFF } from '../../funil/funil.js'
 import { alertarBarrado } from '../../alertas/alertas.js'
+import { copiarParaGestao } from '../../routing/gestao.js'
 
 const NotificarInputSchema = z.object({
   nome: z.string().describe('Nome completo do lead'),
@@ -109,6 +110,8 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
       })
 
       await sendWhatsApp(executive.phoneFormatted, execMessage, log)
+      // Lead que foi para a própria Maria (fallback): a gestão recebe em cópia.
+      if (executive.email === EXECUTIVES.MARIA_HELENA.email) await copiarParaGestao(execMessage)
 
       // 4. Envia cópia para Maria Helena (gestora) — exceto se ela própria for a
       //    executiva escolhida (fallback), pra evitar receber 2 msgs.
@@ -122,6 +125,7 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
           reason,
         })
         await sendWhatsApp(EXECUTIVES.MARIA_HELENA.phoneFormatted, managerMessage, log)
+        await copiarParaGestao(managerMessage)
       }
 
       // 5. Atribui owner no CRM (assign-owner-by-phone)
