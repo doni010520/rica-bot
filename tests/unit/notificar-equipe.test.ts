@@ -180,12 +180,16 @@ describe('notificar_equipe tool', () => {
 
     it('NÃO duplica msg pra Maria Helena quando ela é a executiva (fallback)', async () => {
       // "Consultoria" não bate em regra específica → fallback → Maria Helena
-      // Nesse caso ela só deve receber 1 mensagem (a do executivo), não a cópia gestora
+      // Nesse caso ela só deve receber 1 mensagem (a do executivo), não a cópia gestora.
+      // Desde 13/10 a Jéssica recebe a mesma mensagem em cópia (src/routing/gestao.ts).
       await callNotificar({ produto: 'Consultoria genérica', telefone: '5511999887700' })
-      const wappCalls = (mockFetch as Mock).mock.calls.filter(
-        (c) => String(c[0]).includes('/send/text')
-      )
-      expect(wappCalls.length).toBe(1)
+      const numeros = (mockFetch as Mock).mock.calls
+        .filter((c) => String(c[0]).includes('/send/text'))
+        .map((c) => (JSON.parse(c[1].body as string) as { number: string }).number)
+      const maria = process.env['EXEC_MARIA_HELENA_PHONE'] ?? ''
+      expect(numeros.filter((n) => n === maria)).toHaveLength(1)
+      expect(numeros.filter((n) => n.endsWith('99880892'))).toHaveLength(1)
+      expect(numeros).toHaveLength(2)
     })
 
     it('segundo WhatsApp é para Maria Helena (gestora)', async () => {
