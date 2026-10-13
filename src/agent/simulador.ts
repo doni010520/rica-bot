@@ -28,7 +28,7 @@ import { logger } from '../observability/logger.js'
 import { buildSystemPrompt, type CrmContext } from './prompt.js'
 import { buildAllTools } from '../tools/index.js'
 import { detectarCampanhaDoAnuncio, blocoFunilParaPrompt, type FunilRow } from '../funil/funil.js'
-import { avaliarSeELead, respostaNaoELead } from '../qualificacao/porta-lead.js'
+import { avaliarSeELead, respostaNaoELead, respostaUseAgenda, CAMPANHAS_COM_AGENDA } from '../qualificacao/porta-lead.js'
 
 /** Tools que podem rodar de verdade: leitura, sem efeito no mundo. */
 const TOOLS_SEGURAS = new Set(['buscar_documentos'])
@@ -62,6 +62,7 @@ export function tolsDeSimulacao(
   pool: Pool,
   registro: ChamadaDeTool[],
   falasDoLead = '',
+  campanha = '',
 ): Record<string, CoreTool> {
   const reais = buildAllTools(phone, pool) as Record<string, CoreTool>
   const saida: Record<string, CoreTool> = {}
@@ -92,6 +93,10 @@ export function tolsDeSimulacao(
         const posicao = registro.push({ tool: nome, argumentos: args, executada: false }) - 1
         // A porta do lead roda de verdade (só lê): sem ela o simulador diria que
         // encaminhou quem a produção barraria.
+        if (nome === 'notificar_equipe' && CAMPANHAS_COM_AGENDA.has(campanha)) {
+          registro[posicao] = { tool: 'notificar_equipe (trocado pela agenda)', argumentos: args, executada: false }
+          return respostaUseAgenda(campanha)
+        }
         if (nome === 'notificar_equipe') {
           const avaliacao = await avaliarSeELead(falasDoLead)
           if (!avaliacao.ehLead) {
@@ -157,7 +162,7 @@ export async function simularTurno(
   const registro: ChamadaDeTool[] = []
   // Só as falas do lead, como na produção (ver src/qualificacao/porta-lead.ts).
   const falasDoLead = mensagens.filter((m) => m.papel === 'lead').map((m) => `LEAD: ${m.texto}`).join('\n')
-  const tools = comTools ? tolsDeSimulacao(TELEFONE_SIMULADO, pool, registro, falasDoLead) : {}
+  const tools = comTools ? tolsDeSimulacao(TELEFONE_SIMULADO, pool, registro, falasDoLead, anuncio?.campanha ?? '') : {}
 
   const historico = mensagens.map((m) => ({
     role: m.papel === 'lead' ? ('user' as const) : ('assistant' as const),

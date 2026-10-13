@@ -81,6 +81,30 @@ export async function avaliarSeELead(falasDoLead: string): Promise<Avaliacao> {
   }
 }
 
+/** Campanhas em que o caminho até o André é a REUNIÃO, não o aviso solto. */
+export const CAMPANHAS_COM_AGENDA = new Set(['mentoria', 'gps'])
+
+/**
+ * 13/10/2026: lead da Mentoria que só respondeu "obrigada 🌹" duas vezes foi
+ * passado ao André como "lead quentinho" às 05:42, sem reunião (o gatilho G1 do
+ * prompt — 2 respostas + produto do anúncio — atropelou o fluxo da campanha). O
+ * André reclamou: "a Rica está transferindo cliente sem agendamento".
+ */
+export function respostaUseAgenda(campanha: string) {
+  const comoAgendar = campanha === 'gps'
+    ? 'enviar_link_agenda_andre (link da agenda do André)'
+    : 'consultar_horarios_andre e depois agendar_reuniao_andre'
+  return {
+    success: false,
+    use_agenda: true,
+    message:
+      'NÃO ENCAMINHADO: este lead é da campanha ' + campanha + ', em que o André só recebe o lead com REUNIÃO MARCADA. ' +
+      'Não diga que passou os dados nem que alguém vai entrar em contato. Siga o fluxo da campanha: se o lead já contou ' +
+      'a dor ou pediu para falar com alguém, ofereça a conversa com o André usando ' + comoAgendar + '; se ainda não, ' +
+      'faça UMA pergunta curta de diagnóstico. Se ele só agradeceu ou mandou emoji, responda com simpatia e faça a pergunta.',
+  }
+}
+
 /** O que a tool devolve à Rica quando a pessoa não é cliente possível. */
 export function respostaNaoELead(motivo: string) {
   return {

@@ -26,7 +26,8 @@ import { scheduleExecutiveFollowup } from '../../followup/executive-followup.js'
 import { logOutbound } from '../../observability/outbound-log.js'
 import { getPool } from '../../lib/db.js'
 import { loadChatHistory } from '../../memory/postgres-chat.js'
-import { avaliarSeELead, respostaNaoELead } from '../../qualificacao/porta-lead.js'
+import { avaliarSeELead, respostaNaoELead, respostaUseAgenda, CAMPANHAS_COM_AGENDA } from '../../qualificacao/porta-lead.js'
+import { funilAtual, ETAPAS_POS_HANDOFF } from '../../funil/funil.js'
 import { alertarBarrado } from '../../alertas/alertas.js'
 
 const NotificarInputSchema = z.object({
@@ -58,6 +59,14 @@ export function buildNotificarEquipeTool(conversationPhone: string) {
       const { nome, telefone, produto, mensagem, empresa, email, deal_id, resumo_diagnostico } = params
 
       log.info({ produto }, 'Notificar equipe chamado')
+
+      // 0a. Mentoria e GPS: o André recebe o lead pela REUNIÃO marcada (agenda),
+      //     nunca por este aviso solto. Ver respostaUseAgenda.
+      const funil = await funilAtual(getPool(), conversationPhone).catch(() => null)
+      if (funil && CAMPANHAS_COM_AGENDA.has(funil.campanha) && !ETAPAS_POS_HANDOFF.has(funil.etapa)) {
+        log.info({ produto, campanha: funil.campanha, etapa: funil.etapa }, '📅 notificar_equipe trocado pela agenda (lead de campanha sem reunião)')
+        return respostaUseAgenda(funil.campanha)
+      }
 
       // 0. Porta do lead — quem claramente não é cliente não vira "lead quentinho"
       //    (ver src/qualificacao/porta-lead.ts). Fail-open: erro aqui deixa passar.
