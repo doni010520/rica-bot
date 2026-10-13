@@ -117,6 +117,11 @@ export async function alertarPerdido(phone: string, motivo: string): Promise<voi
   )
 }
 
+/** 5. Mensagem agendada para grupo (ex.: régua da Masterclass) não saiu. */
+export async function alertarEnvioGrupo(id: number, detalhe: string): Promise<void> {
+  await alertar(`grupo:${id}`, 24 * 3600, `📣 *Rica — envio em grupo*\n\nA mensagem agendada #${id} ${detalhe}.`)
+}
+
 /** 3. A Rica não conseguiu responder e mandou a mensagem de fallback. */
 export async function alertarFalha(phone: string, detalhe: string): Promise<void> {
   await alertar(

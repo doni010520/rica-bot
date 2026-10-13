@@ -147,6 +147,20 @@ export async function sendWhatsAppMedia(
   if (error) throw error
 }
 
+/**
+ * Envia para um GRUPO (jid "...@g.us"). Não passa pelo normalizePhone, que
+ * estragaria o jid, nem pelo espelho do CRM (grupo não é lead). Imagem com
+ * legenda quando houver midiaUrl; senão, texto.
+ */
+export async function sendToGroup(jid: string, params: { texto: string; midiaUrl?: string | null }): Promise<void> {
+  if (!jid.endsWith('@g.us')) throw new Error(`sendToGroup: "${jid}" não é um grupo`)
+  if (params.midiaUrl) {
+    await postToUazapi({ number: jid, type: 'image', file: params.midiaUrl, ...(params.texto ? { text: params.texto } : {}) } as UazapiMediaPayload, '/send/media')
+  } else {
+    await postToUazapi({ number: jid, text: params.texto } as UazapiSendPayload)
+  }
+}
+
 function rotuloDaMidia(tipo: TipoDeMidia): string {
   if (tipo === 'image') return '[imagem]'
   if (tipo === 'video') return '[vídeo]'

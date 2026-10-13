@@ -18,6 +18,7 @@ import { handleWebhook, handleBufferedMessage } from './webhook/handler.js'
 import { startExecutiveFollowupWorker, closeExecutiveFollowup } from './followup/executive-followup.js'
 import { startLeadFollowupWorker, closeLeadFollowup } from './followup/lead-followup.js'
 import { startDailyDigestWorker, stopDailyDigestWorker } from './reports/daily-digest.js'
+import { startEnviosGrupoWorker } from './grupos/envios-agendados.js'
 import { startWeeklyInsightsWorker, stopWeeklyInsightsWorker } from './reports/weekly-insights.js'
 import { startStaleTransferWorker, stopStaleTransferWorker } from './routing/transfer-stale.js'
 import { startPendenciasWorker, stopPendenciasWorker } from './funil/pendencias.js'
@@ -306,6 +307,7 @@ async function main() {
     startResgateWorker(getPool())
     startFunilSemanalWorker(getPool())
     startAgendaLinksWorker(getPool())
+    startEnviosGrupoWorker(getPool())
 
     const buffer = getMessageBuffer()
     buffer.startWorker(async (msg) => {
