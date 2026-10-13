@@ -10,14 +10,38 @@
  * quero nada contigo"), recebeu 4 toques. Quem pedia vaga de padeiro também
  * seguia na régua. A Jéssica pediu (13/10): parar, marcar como perdido e, para
  * quem procura emprego, mandar o e-mail do RH.
+ *
+ * ONDE: na hora em que o lead fala, não a cada toque da régua (o Adonias pediu
+ * para não gastar IA à toa). Um filtro por palavras decide se vale checar; só
+ * então a porta do lead (IA) confirma. A régua só lê o "não contatar".
  */
 
 import type { Pool } from 'pg'
 import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
-import { atualizarFunil, type Campanha } from '../funil/funil.js'
+import { atualizarFunil, funilAtual, type Campanha } from '../funil/funil.js'
 import { notifyHR } from '../candidato/detect.js'
 import { alertarPerdido } from '../alertas/alertas.js'
+
+/**
+ * Sinal barato (sem IA) de que o lead pode estar saindo: recusa, pedido para
+ * parar ou busca de emprego, em português ou espanhol. Só com ele a IA é chamada.
+ * "Mais tarde" de propósito NÃO entra (adiar não é recusar).
+ */
+const SINAL_DE_SAIDA =
+  /n[aã]o (quero|vou querer|preciso|tenho interesse)|sem interesse|desist|deixa (pra|para) (outra|depois)|outra oportunidade|n[aã]o,? obrigad|par[ae] de (me )?(mandar|enviar|ligar|chamar)|n[aã]o (me )?(mand[ae]|envi[ae]|lig[ae]|cham[ae])|me (tira|remov)|pol[ií]cia|denunc|bloque|emprego|vaga|trabalh|curr[ií]culo|ayudante|alludante|panader|empleo|oportunidad|n[aã]o vou precisar|perturb/i
+
+export function temSinalDeSaida(texto: string): boolean {
+  return SINAL_DE_SAIDA.test(texto)
+}
+
+/** A própria Rica combinou com o lead que não vai mais mandar mensagem (caso Solange). */
+const RICA_PROMETEU_PARAR =
+  /n[aã]o vou mais (te )?(enviar|mandar|incomodar|chamar)|vou respeitar (o )?seu pedido|n[aã]o (vou|irei) mais te procurar/i
+
+export function ricaPrometeuParar(resposta: string): boolean {
+  return RICA_PROMETEU_PARAR.test(resposta)
+}
 
 /** Motivo da porta do lead que indica busca de emprego. */
 export function ehBuscaDeEmprego(motivo: string): boolean {
@@ -28,12 +52,13 @@ export async function encerrarComoPerdido(
   pool: Pool,
   phone: string,
   motivo: string,
-  campanha: string,
+  campanha: string | undefined,
   ultimaFala: string,
 ): Promise<void> {
   const log = logger.child({ fn: 'encerrarComoPerdido', phone: phone.slice(-4) })
   const tel = phone.replace(/\D/g, '')
-  const camp = (['mentoria', 'jdl', 'gps'].includes(campanha) ? campanha : 'outro') as Campanha
+  const conhecida = campanha ?? (await funilAtual(pool, phone).catch(() => null))?.campanha ?? 'outro'
+  const camp = (['mentoria', 'jdl', 'gps'].includes(conhecida) ? conhecida : 'outro') as Campanha
 
   await atualizarFunil(pool, phone, camp, { etapa: 'nao_contatar', evento: 'perdido_auto', dados: { motivo } })
   await pool.query(

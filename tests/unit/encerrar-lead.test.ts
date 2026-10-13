@@ -11,7 +11,7 @@ vi.mock('../../src/candidato/detect.js', () => ({ notifyHR: (...a: unknown[]) =>
 const alertarPerdido = vi.fn()
 vi.mock('../../src/alertas/alertas.js', () => ({ alertarPerdido: (...a: unknown[]) => alertarPerdido(...a) }))
 
-const { encerrarComoPerdido, ehBuscaDeEmprego } = await import('../../src/qualificacao/encerrar-lead.js')
+const { encerrarComoPerdido, ehBuscaDeEmprego, temSinalDeSaida, ricaPrometeuParar } = await import('../../src/qualificacao/encerrar-lead.js')
 
 const sqls: string[] = []
 const pool = { query: vi.fn(async (sql: string) => { sqls.push(sql); return { rowCount: 1, rows: [] } }) }
@@ -39,5 +39,18 @@ describe('encerrar lead como perdido', () => {
     expect(ehBuscaDeEmprego('procura vaga de padeiro')).toBe(true)
     expect(ehBuscaDeEmprego('quer trabalhar na padaria')).toBe(true)
     expect(ehBuscaDeEmprego('disse que não quer agora')).toBe(false)
+  })
+
+  it('filtro sem IA: recusas e emprego acionam; adiar e conversa normal não', () => {
+    for (const t of ['Não, obrigado', 'Deixa pra outra oportunidade, não vou querer agora', 'não liga pra mim mais não, senão eu vou na polícia',
+      'eu não vou precisar de você pra nada', 'Si estoy interesado en alludante de panadería', 'Preciso de trabalho na padaria', 'para de me mandar mensagem'])
+      expect(temSinalDeSaida(t), t).toBe(true)
+    for (const t of ['Mas tarde, estou fazendo compras', 'Melhorar o lucro', 'Quero saber como funciona e quanto custa', 'Oi, quero saber mais sobre a GPS Padaria'])
+      expect(temSinalDeSaida(t), t).toBe(false)
+  })
+
+  it('reconhece quando a Rica prometeu parar de mandar mensagem', () => {
+    expect(ricaPrometeuParar('Entendo, Solange. Vou respeitar seu pedido e não vou mais te enviar mensagens.')).toBe(true)
+    expect(ricaPrometeuParar('Se precisar, é só chamar!')).toBe(false)
   })
 })

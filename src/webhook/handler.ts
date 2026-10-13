@@ -39,7 +39,9 @@ import {
 } from '../uazapi/client.js'
 import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-followup.js'
 import { isTeamPhone, EXECUTIVES } from '../routing/executives.config.js'
-import { aoReceberDoLead, aoResponderLead, funilAtual, blocoFunilParaPrompt, gpsEntregueAoAndre } from '../funil/funil.js'
+import { aoReceberDoLead, aoResponderLead, funilAtual, blocoFunilParaPrompt, gpsEntregueAoAndre, naoContatar } from '../funil/funil.js'
+import { avaliarSeELead } from '../qualificacao/porta-lead.js'
+import { encerrarComoPerdido, temSinalDeSaida, ricaPrometeuParar, ehBuscaDeEmprego } from '../qualificacao/encerrar-lead.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
 import { tryResolverPendencia } from '../funil/pendencias.js'
 import { logger, webhookLogger } from '../observability/logger.js'
@@ -263,6 +265,23 @@ export async function handleBufferedMessage(
     return // Rica não responde para candidatos
   }
 
+  // 3.1 Lead saindo (recusou, pediu para parar, procura emprego): marca "não
+  //     contatar" + perdido AGORA, para a régua não insistir. O filtro por palavras
+  //     é grátis; a IA (porta do lead) só confirma quando ele dispara.
+  if (temSinalDeSaida(combinedText)) {
+    const anteriores = await loadChatHistory(deps.pool, phone, 30).catch(() => [])
+    const falas = [
+      ...anteriores.filter((m) => m.role === 'human').map((m) => `LEAD: ${m.content}`),
+      `LEAD: ${combinedText}`,
+    ].join('\n')
+    const saida = await avaliarSeELead(falas)
+    if (!saida.ehLead) {
+      await encerrarComoPerdido(deps.pool, phone, saida.motivo, undefined, combinedText)
+      // Quem procura emprego já recebeu o e-mail do RH: a Rica não responde (como no candidato).
+      if (ehBuscaDeEmprego(saida.motivo)) return
+    }
+  }
+
   // 4. Executa agent com tools e CrmContext real
   const tools = buildAllTools(phone, deps.pool)
   const result = await runRica({ phone, displayName: crm.contactName || msg.displayName || '', userMessage: combinedText, crm, tools }, deps.pool)
@@ -293,6 +312,12 @@ export async function handleBufferedMessage(
   log.info({ chunks: result.text.split('\n\n').filter(Boolean).length }, 'Resposta enviada')
 
   void aoResponderLead(deps.pool, phone)
+
+  // 5.1 A Rica combinou com o lead que não manda mais mensagem ("vou respeitar seu
+  //     pedido"): vale como "não contatar", mesmo sem ela chamar a tool (Solange, 13/10).
+  if (ricaPrometeuParar(result.text) && !(await naoContatar(deps.pool, phone))) {
+    await encerrarComoPerdido(deps.pool, phone, 'a Rica combinou com o lead não mandar mais mensagens', undefined, combinedText)
+  }
 
   // 6. Agenda follow-up inteligente (toque 1). Cancelado se o lead responder.
   //    A cadência depende da campanha (Mentoria, Jornada ou padrão).
