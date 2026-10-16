@@ -41,7 +41,7 @@ import { scheduleLeadFollowup, cancelLeadFollowup } from '../followup/lead-follo
 import { isTeamPhone, EXECUTIVES } from '../routing/executives.config.js'
 import { aoReceberDoLead, aoResponderLead, funilAtual, blocoFunilParaPrompt, gpsEntregueAoAndre, naoContatar } from '../funil/funil.js'
 import { avaliarSeELead } from '../qualificacao/porta-lead.js'
-import { encerrarComoPerdido, temSinalDeSaida, ricaPrometeuParar, ehBuscaDeEmprego } from '../qualificacao/encerrar-lead.js'
+import { encerrarComoPerdido, temSinalDeSaida, ricaPrometeuParar, ehBuscaDeEmprego, mensagemDeDespedida } from '../qualificacao/encerrar-lead.js'
 import { whatsappLink } from '../uazapi/normalize-phone.js'
 import { tryResolverPendencia } from '../funil/pendencias.js'
 import { logger, webhookLogger } from '../observability/logger.js'
@@ -279,6 +279,13 @@ export async function handleBufferedMessage(
       await encerrarComoPerdido(deps.pool, phone, saida.motivo, undefined, combinedText)
       // Quem procura emprego já recebeu o e-mail do RH: a Rica não responde (como no candidato).
       if (ehBuscaDeEmprego(saida.motivo)) return
+      // Os demais recebem uma despedida FIXA. Sem a IA: ela tentava salvar a venda
+      // com quem acabou de recusar (Migdalis, 16/10: "No quiero nada" → oferta de reunião).
+      const despedida = mensagemDeDespedida(crm.contactName || msg.displayName || '')
+      await sendWhatsAppChunked(phone, despedida, { crmSender: 'rica_ai', dealId: crm.dealId })
+      await saveChatTurn(deps.pool, phone, combinedText, despedida).catch(() => {})
+      log.info({ motivo: saida.motivo }, 'Lead encerrado — despedida enviada, IA não chamada')
+      return
     }
   }
 

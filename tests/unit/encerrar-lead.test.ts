@@ -11,7 +11,7 @@ vi.mock('../../src/candidato/detect.js', () => ({ notifyHR: (...a: unknown[]) =>
 const alertarPerdido = vi.fn()
 vi.mock('../../src/alertas/alertas.js', () => ({ alertarPerdido: (...a: unknown[]) => alertarPerdido(...a) }))
 
-const { encerrarComoPerdido, ehBuscaDeEmprego, temSinalDeSaida, ricaPrometeuParar } = await import('../../src/qualificacao/encerrar-lead.js')
+const { encerrarComoPerdido, ehBuscaDeEmprego, temSinalDeSaida, ricaPrometeuParar, mensagemDeDespedida } = await import('../../src/qualificacao/encerrar-lead.js')
 
 const sqls: string[] = []
 const pool = { query: vi.fn(async (sql: string) => { sqls.push(sql); return { rowCount: 1, rows: [] } }) }
@@ -47,6 +47,20 @@ describe('encerrar lead como perdido', () => {
       expect(temSinalDeSaida(t), t).toBe(true)
     for (const t of ['Mas tarde, estou fazendo compras', 'Melhorar o lucro', 'Quero saber como funciona e quanto custa', 'Oi, quero saber mais sobre a GPS Padaria'])
       expect(temSinalDeSaida(t), t).toBe(false)
+  })
+
+  it('recusa em espanhol e quem não tem padaria também acionam (Migdalis, 16/10)', () => {
+    for (const t of ['No quiero nada', 'no me interesa', 'No, gracias', 'Eu não tenho padarias', 'não sou dono, só faço os bolos', 'No tengo negocio'])
+      expect(temSinalDeSaida(t), t).toBe(true)
+    for (const t of ['Producáo', 'Fala español', 'Bom dia, o que você quer de mim?'])
+      expect(temSinalDeSaida(t), t).toBe(false)
+  })
+
+  it('despedida fixa não oferece nada', () => {
+    expect(mensagemDeDespedida('Migdalis Perez')).toBe('Entendi, Migdalis. Obrigada pelo retorno! Não vou mais te mandar mensagens. Se um dia precisar, é só chamar por aqui. 😊')
+    expect(mensagemDeDespedida('')).toMatch(/^Entendi\. Obrigada/)
+    expect(mensagemDeDespedida('5531984353329')).toMatch(/^Entendi\. Obrigada/)
+    expect(mensagemDeDespedida('x')).not.toMatch(/reuni|André|ajudar/)
   })
 
   it('reconhece quando a Rica prometeu parar de mandar mensagem', () => {

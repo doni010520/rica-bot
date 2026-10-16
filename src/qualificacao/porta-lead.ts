@@ -51,6 +51,8 @@ ehLead = false quando a pessoa:
 - diz que não quer agora, que deixa para outra oportunidade, que não tem interesse ou que desistiu;
 - pede dinheiro, doação, empréstimo, financiamento, patrocínio ou que a empresa pague/compre algo para ela;
 - ainda não tem o negócio E fala que lhe faltam o básico (terreno, equipamentos, dinheiro) sem mostrar recurso para contratar;
+- recusa em qualquer idioma (ex.: "no quiero nada", "no me interesa", "não quero nada");
+- diz que não tem padaria nem outro negócio, ou que é funcionário (faz bolo/pão para os outros) e não dono;
 - procura emprego, vaga ou trabalho, em qualquer idioma (ex.: "quero trabalhar aí", "ayudante de panadería");
 - é engano, trote ou assunto sem relação com empresa.
 

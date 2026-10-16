@@ -27,12 +27,25 @@ import { alertarPerdido } from '../alertas/alertas.js'
  * Sinal barato (sem IA) de que o lead pode estar saindo: recusa, pedido para
  * parar ou busca de emprego, em português ou espanhol. Só com ele a IA é chamada.
  * "Mais tarde" de propósito NÃO entra (adiar não é recusar).
+ * 16/10: "No quiero nada" (espanhol) e "Eu não tenho padarias" passavam direto e a
+ * Rica seguiu oferecendo reunião (Migdalis, 31 98435-3329).
  */
 const SINAL_DE_SAIDA =
-  /n[aã]o (quero|vou querer|preciso|tenho interesse)|sem interesse|desist|deixa (pra|para) (outra|depois)|outra oportunidade|n[aã]o,? obrigad|par[ae] de (me )?(mandar|enviar|ligar|chamar)|n[aã]o (me )?(mand[ae]|envi[ae]|lig[ae]|cham[ae])|me (tira|remov)|pol[ií]cia|denunc|bloque|emprego|vaga|trabalh|curr[ií]culo|ayudante|alludante|panader|empleo|oportunidad|n[aã]o vou precisar|perturb/i
+  /n[aã]o (quero|vou querer|preciso|tenho interesse)|sem interesse|desist|deixa (pra|para) (outra|depois)|outra oportunidade|n[aã]o,? obrigad|par[ae] de (me )?(mandar|enviar|ligar|chamar)|n[aã]o (me )?(mand[ae]|envi[ae]|lig[ae]|cham[ae])|me (tira|remov)|pol[ií]cia|denunc|bloque|emprego|vaga|trabalh|curr[ií]culo|ayudante|alludante|panader|empleo|oportunidad|n[aã]o vou precisar|perturb|\bno (quiero|necesito|me interesa|estoy interesad)|\bno,? gracias|no me (escrib|mand|llam|molest)|n[aã]o tenho (padaria|neg[oó]cio|empresa|loja)|no tengo (negocio|empresa)|n[aã]o sou (o |a )?(dono|dona|propriet)/i
 
 export function temSinalDeSaida(texto: string): boolean {
   return SINAL_DE_SAIDA.test(texto)
+}
+
+/**
+ * O que a Rica diz depois de encerrar o lead. Texto FIXO, sem IA: deixada solta,
+ * a IA tentava salvar a venda ("posso ajudar com outras soluções") justamente com
+ * quem acabou de dizer que não quer (Migdalis, 16/10).
+ */
+export function mensagemDeDespedida(nome?: string): string {
+  const primeiro = (nome || '').trim().split(/\s+/)[0]
+  const saudacao = primeiro && /^[A-Za-zÀ-ÿ]{2,}$/.test(primeiro) ? `Entendi, ${primeiro}.` : 'Entendi.'
+  return `${saudacao} Obrigada pelo retorno! Não vou mais te mandar mensagens. Se um dia precisar, é só chamar por aqui. 😊`
 }
 
 /** A própria Rica combinou com o lead que não vai mais mandar mensagem (caso Solange). */
