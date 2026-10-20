@@ -29,12 +29,15 @@ import { alertarPerdido } from '../alertas/alertas.js'
  * "Mais tarde" de propósito NÃO entra (adiar não é recusar).
  * 16/10: "No quiero nada" (espanhol) e "Eu não tenho padarias" passavam direto e a
  * Rica seguiu oferecendo reunião (Migdalis, 31 98435-3329).
+ * 19/10: "Vendi a padaria. Bgda." também passava e a régua mandou mais 4 toques
+ * (Zuleica, 11 97799-9293). Quem vendeu, fechou ou passou o negócio também sai.
  */
 const SINAL_DE_SAIDA =
-  /n[aã]o (quero|vou querer|preciso|tenho interesse)|sem interesse|desist|deixa (pra|para) (outra|depois)|outra oportunidade|n[aã]o,? obrigad|par[ae] de (me )?(mandar|enviar|ligar|chamar)|n[aã]o (me )?(mand[ae]|envi[ae]|lig[ae]|cham[ae])|me (tira|remov)|pol[ií]cia|denunc|bloque|emprego|vaga|trabalh|curr[ií]culo|ayudante|alludante|panader|empleo|oportunidad|n[aã]o vou precisar|perturb|\bno (quiero|necesito|me interesa|estoy interesad)|\bno,? gracias|no me (escrib|mand|llam|molest)|n[aã]o tenho (padaria|neg[oó]cio|empresa|loja)|no tengo (negocio|empresa)|n[aã]o sou (o |a )?(dono|dona|propriet)/i
+  /n[aã]o (quero|vou querer|preciso|tenho interesse)|sem interesse|desist|deixa (pra|para) (outra|depois)|outra oportunidade|n[aã]o,? obrigad|par[ae] de (me )?(mandar|enviar|ligar|chamar)|n[aã]o (me )?(mand[ae]|envi[ae]|lig[ae]|cham[ae])|me (tira|remov)|pol[ií]cia|denunc|bloque|emprego|vaga|trabalh|curr[ií]culo|ayudante|alludante|panader|empleo|oportunidad|n[aã]o vou precisar|perturb|\bno (quiero|necesito|me interesa|estoy interesad)|\bno,? gracias|no me (escrib|mand|llam|molest)|n[aã]o tenho (padaria|neg[oó]cio|empresa|loja)|no tengo (negocio|empresa)|n[aã]o sou (o |a )?(dono|dona|propriet)|vend(i|emos|eu) (a |o |minha |meu |nossa |nosso )?(padaria|neg[oó]cio|empresa|loja|ponto)|fech(ei|amos|ou) (a |o |minha |meu |nossa |nosso )?(padaria|neg[oó]cio|empresa|loja)|passei (a |o )?(padaria|neg[oó]cio|ponto)|n[aã]o tenho mais (a |o )?(padaria|neg[oó]cio|empresa|loja)|aposentei|mudei de ramo/i
 
 export function temSinalDeSaida(texto: string): boolean {
-  return SINAL_DE_SAIDA.test(texto)
+  // Espaço duplo é comum no celular ("Vendi  a padaria") e quebrava o casamento.
+  return SINAL_DE_SAIDA.test(texto.replace(/\s+/g, ' '))
 }
 
 /**

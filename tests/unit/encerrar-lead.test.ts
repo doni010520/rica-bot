@@ -56,6 +56,13 @@ describe('encerrar lead como perdido', () => {
       expect(temSinalDeSaida(t), t).toBe(false)
   })
 
+  it('quem vendeu ou fechou o negócio sai (Zuleica, 19/10)', () => {
+    for (const t of ['Vendi  a padaria. Bgda.', 'vendemos a padaria mês passado', 'fechei a padaria', 'não tenho mais padaria', 'me aposentei'])
+      expect(temSinalDeSaida(t), t).toBe(true)
+    for (const t of ['vendo bem mas o dinheiro some', 'quero vender mais na padaria', 'a padaria fecha às 20h'])
+      expect(temSinalDeSaida(t), t).toBe(false)
+  })
+
   it('despedida fixa não oferece nada', () => {
     expect(mensagemDeDespedida('Migdalis Perez')).toBe('Entendi, Migdalis. Obrigada pelo retorno! Não vou mais te mandar mensagens. Se um dia precisar, é só chamar por aqui. 😊')
     expect(mensagemDeDespedida('')).toMatch(/^Entendi\. Obrigada/)

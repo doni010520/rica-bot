@@ -53,6 +53,7 @@ ehLead = false quando a pessoa:
 - ainda não tem o negócio E fala que lhe faltam o básico (terreno, equipamentos, dinheiro) sem mostrar recurso para contratar;
 - recusa em qualquer idioma (ex.: "no quiero nada", "no me interesa", "não quero nada");
 - diz que não tem padaria nem outro negócio, ou que é funcionário (faz bolo/pão para os outros) e não dono;
+- diz que vendeu, fechou ou passou o negócio, ou que se aposentou (ex.: "vendi a padaria");
 - procura emprego, vaga ou trabalho, em qualquer idioma (ex.: "quero trabalhar aí", "ayudante de panadería");
 - é engano, trote ou assunto sem relação com empresa.
 
