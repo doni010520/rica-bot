@@ -213,6 +213,10 @@ const EnvSchema = z.object({
   // Patrícia — recebe GPS de RJ/MG. Opcional com default (configurável no EasyPanel).
   EXEC_PATRICIA_PHONE:     z.string().regex(/^55\d{10,11}$/).default('5521979937174'),
   EXEC_PATRICIA_EMAIL:     z.string().email().default('patricia@sucessonoresultado.com.br'),
+  // Raquel (nov/2026): divide os leads da Mentoria meio a meio com o André.
+  // Enquanto o telefone dela não estiver configurado, todo lead vai pro André.
+  EXEC_RAQUEL_PHONE:       z.string().regex(/^55\d{10,11}$/).optional(),
+  EXEC_RAQUEL_EMAIL:       z.string().email().optional(),
 })
 
 export type Env = z.infer<typeof EnvSchema>

@@ -20,6 +20,8 @@
 import type { Pool } from 'pg'
 import { env } from '../lib/env.js'
 import { logger } from '../observability/logger.js'
+import { EXECUTIVES } from '../routing/executives.config.js'
+import { definirExecutivoMentoria, executivoDoLead, primeiroNome } from './divisao-mentoria.js'
 
 export type Campanha = 'mentoria' | 'jdl' | 'gps' | 'outro'
 
@@ -127,6 +129,7 @@ export type FunilRow = {
   followup_step_reached: number
   message_count_rica: number
   deal_id: string | null
+  executivo_email?: string | null
 }
 
 export function digits(phone: string): string {
@@ -262,7 +265,7 @@ export async function funilAtual(pool: Pool, phone: string): Promise<FunilRow | 
               objetivo_declarado, pilar_aderente, decisor, tamanho_operacao, temperatura,
               pergunta_de_compra, objecao, meeting_status, papel, categoria_dor, cidade, classe,
               handoff_at, meeting_start_at, link_enviado_at, nao_contatar, followup_step_reached,
-              message_count_rica, deal_id
+              message_count_rica, deal_id, executivo_email
        FROM rica_lead_funil
        WHERE organization_id = $1 AND phone = $2
        ORDER BY last_interaction_at DESC NULLS LAST
@@ -306,6 +309,7 @@ export async function aoReceberDoLead(pool: Pool, phone: string, texto: string, 
         campos: { origem: anuncio.origem, ...deal },
         evento: 'lead_created',
       })
+      if (anuncio.campanha === 'mentoria') await definirExecutivoMentoria(pool, phone)
       return
     }
     // Respondeu a uma mensagem do resgate (inclusive a 3ª, que já encerra a
@@ -329,6 +333,7 @@ export async function aoReceberDoLead(pool: Pool, phone: string, texto: string, 
     const atual = await funilAtual(pool, phone)
     if (atual) {
       await atualizarFunil(pool, phone, atual.campanha, { etapa: 'engajou', evento: 'lead_reply', campos: deal })
+      if (atual.campanha === 'mentoria' && !atual.executivo_email) await definirExecutivoMentoria(pool, phone)
       // Primeira resposta do lead (manual GPS, seção 18) — grava só uma vez.
       await pool.query(
         `UPDATE rica_lead_funil SET primeira_resposta = $4
@@ -419,6 +424,13 @@ export function blocoFunilParaPrompt(f: FunilRow | null): string {
   // Primeira resposta ao lead do anúncio: o modelo tendia a despejar a
   // apresentação do produto (JDL e GPS, 23-29/09) em vez da abertura da campanha.
   const primeira = f.etapa === 'novo' ? PRIMEIRA_RESPOSTA[f.campanha] : undefined
+  const exec = f.campanha === 'mentoria' ? executivoDoLead(f) : null
+  if (exec && exec.email !== EXECUTIVES.ANDRE.email) {
+    linhas.push(
+      `ESPECIALISTA DESTE LEAD: ${primeiroNome(exec.name)}. Em TODO o fluxo_pre_vendas, onde o texto diz "André", ` +
+      `use "${primeiroNome(exec.name)}" (convite, agenda, confirmação e handoff). Nunca cite o André para este lead.`,
+    )
+  }
   if (primeira) linhas.push(primeira)
   else if (f.campanha === 'gps') {
     const o = orientacaoGps(f)

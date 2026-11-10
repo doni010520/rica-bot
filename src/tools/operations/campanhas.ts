@@ -25,6 +25,7 @@ import { cancelLeadFollowup } from '../../followup/lead-followup.js'
 import { atualizarFunil, funilAtual, ETAPAS, type Campanha } from '../../funil/funil.js'
 import { handoffEstruturado, resumoDaFicha, type Ficha } from '../../funil/handoff.js'
 import { criarPendencia } from '../../funil/pendencias.js'
+import { executivoDoLead, primeiroNome } from '../../funil/divisao-mentoria.js'
 
 const CAMPANHAS = ['mentoria', 'jdl', 'gps', 'outro'] as const
 
@@ -64,6 +65,12 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
 
   async function campanhaAtual(padrao: Campanha = 'mentoria'): Promise<Campanha> {
     return (await funilAtual(pool, phone))?.campanha ?? padrao
+  }
+
+  /** Mentoria: o executivo sorteado para o lead (André ou Raquel). GPS/JDL: o André. */
+  async function executivoAtual() {
+    const f = await funilAtual(pool, phone)
+    return f?.campanha === 'mentoria' ? executivoDoLead(f) : andre
   }
 
   async function dealIdDoLead(): Promise<string | undefined> {
@@ -114,13 +121,15 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
       'Chame ANTES de oferecer qualquer horário — nunca invente horário. Ofereça de 2 a 4 opções, priorizando hoje.',
     parameters: z.object({}),
     execute: async () => {
+      const exec = await executivoAtual()
+      const nome = primeiroNome(exec.name)
       try {
         const r = await crmRequest<{ conectado: boolean; slots: Array<{ inicio: string; rotulo: string }> }>(
           '/api/rica/agenda/disponibilidade',
-          { params: { executivo_email: andre.email, duracao: '30' }, operationName: 'agenda_disponibilidade', timeoutMs: 15_000 },
+          { params: { executivo_email: exec.email, duracao: '30' }, operationName: 'agenda_disponibilidade', timeoutMs: 15_000 },
         )
         if (!r.conectado) {
-          return { conectado: false, slots: [], instrucao: 'Agenda do André não está conectada. Use handoff_mentoria com situacao="agenda_nao_conectada" e diga ao lead que o André vai chamar para combinar o melhor horário.' }
+          return { conectado: false, slots: [], instrucao: `Agenda de ${nome} não está conectada. Use handoff_mentoria com situacao="agenda_nao_conectada" e diga ao lead que ${nome} vai chamar para combinar o melhor horário.` }
         }
         const slots = r.slots.slice(0, 8)
         const campanha = await campanhaAtual()
@@ -130,9 +139,9 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
           evento: 'scheduling_options_shown',
         })
         if (slots.length === 0) {
-          return { conectado: true, slots: [], instrucao: 'Sem horário hoje e amanhã. NÃO ofereça outras datas. Use handoff_mentoria com situacao="sem_horario" e diga que o André vai chamar ainda hoje.' }
+          return { conectado: true, slots: [], instrucao: `Sem horário hoje e amanhã. NÃO ofereça outras datas. Use handoff_mentoria com situacao="sem_horario" e diga que ${nome} vai chamar ainda hoje.` }
         }
-        return { conectado: true, slots, instrucao: 'Ofereça de 2 a 4 destes rótulos ao lead. Guarde o campo "inicio" do escolhido para agendar_reuniao_andre.' }
+        return { conectado: true, executivo: nome, slots, instrucao: `A reunião deste lead é com ${nome}. Ofereça de 2 a 4 destes rótulos ao lead. Guarde o campo "inicio" do escolhido para agendar_reuniao_andre.` }
       } catch (err) {
         log.warn({ err }, 'consultar_horarios_andre falhou')
         return { conectado: false, slots: [], instrucao: 'Não consegui ler a agenda agora. Use handoff_mentoria com situacao="agenda_nao_conectada".' }
@@ -152,6 +161,8 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
     execute: async ({ inicio, ...ficha }) => {
       const campanha = await campanhaAtual()
       const dealId = await dealIdDoLead()
+      const exec = await executivoAtual()
+      const nome = primeiroNome(exec.name)
       const completa: Ficha = { ...ficha, produto: PRODUTO[campanha] }
       try {
         const r = await crmRequest<{ ok: boolean; event_id: string; inicio: string; rotulo: string }>(
@@ -159,7 +170,7 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
           {
             method: 'POST',
             body: {
-              executivo_email: andre.email,
+              executivo_email: exec.email,
               inicio,
               duracao: 30,
               lead: { nome: ficha.nome, telefone: phone, padaria: ficha.padaria },
@@ -174,20 +185,20 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
         await handoffEstruturado(pool, {
           telefone: phone,
           campanha,
-          exec: andre,
+          exec,
           ficha: completa,
           reuniao: { tipo: 'agendada', rotulo: r.rotulo, inicioIso: r.inicio, eventId: r.event_id },
           dealId,
         })
-        return { success: true, confirmado: r.rotulo, instrucao: `Confirme ao lead: reunião com o André ${r.rotulo}, 30 minutos, por aqui no WhatsApp/link que ele enviar. Depois PARE de vender.` }
+        return { success: true, confirmado: r.rotulo, instrucao: `Confirme ao lead: reunião com ${nome} ${r.rotulo}, 30 minutos, por aqui no WhatsApp/link que ele enviar. Depois PARE de vender.` }
       } catch (err) {
         const body = err instanceof CrmApiError ? (err.body as { motivo?: string; slots?: unknown[] }) : undefined
         if (body?.motivo === 'horario_indisponivel') {
           return { success: false, motivo: 'horario_indisponivel', slots: body.slots ?? [], instrucao: 'Esse horário acabou de ser ocupado. Ofereça os slots devolvidos aqui.' }
         }
         log.warn({ err }, 'agendar_reuniao_andre falhou — handoff sem reunião')
-        await handoffEstruturado(pool, { telefone: phone, campanha, exec: andre, ficha: completa, reuniao: { tipo: 'agenda_nao_conectada' }, dealId })
-        return { success: false, motivo: 'erro_agenda', instrucao: 'Não consegui marcar na agenda. Já passei o caso ao André: diga ao lead que o André vai chamar para confirmar o horário.' }
+        await handoffEstruturado(pool, { telefone: phone, campanha, exec, ficha: completa, reuniao: { tipo: 'agenda_nao_conectada' }, dealId })
+        return { success: false, motivo: 'erro_agenda', instrucao: `Não consegui marcar na agenda. Já passei o caso a ${nome}: diga ao lead que ${nome} vai chamar para confirmar o horário.` }
       }
     },
   })
@@ -254,18 +265,19 @@ export function buildCampanhasTools(phone: string, pool: Pool) {
     }),
     execute: async ({ situacao, pedido_de_data, ...ficha }) => {
       const campanha = await campanhaAtual()
+      const exec = await executivoAtual()
       const reuniao =
         situacao === 'pediu_outra_data' ? { tipo: 'pediu_outra_data' as const, pedido: pedido_de_data ?? 'outra data' }
         : { tipo: situacao }
       await handoffEstruturado(pool, {
         telefone: phone,
         campanha,
-        exec: andre,
+        exec,
         ficha: { ...ficha, produto: PRODUTO[campanha] },
         reuniao,
         dealId: await dealIdDoLead(),
       })
-      return { success: true, executivo: andre.name }
+      return { success: true, executivo: exec.name }
     },
   })
 
